@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint -- --max-warnings 20
+      - run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r backend/requirements.txt
+      - run: pip install flake8
+      - run: cd backend && python -c "import separate_v2, separate_v11, separate_v12; print('imports OK')"
+      - run: flake8 backend/main.py --max-line-length=120 --ignore=E501,W503,E402,E722,F401 --count
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: FOSSA Scan
+        uses: fossas/fossa-action@main
+        with:
+          api-key: ${{ secrets.FOSSA_API_KEY }}
+        continue-on-error: true
+      - name: npm audit
+        run: npm audit --audit-level=high || true
+      - name: pip audit
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt || true

@@ -1,0 +1,16 @@
+{
+  "combined_score": 322.54442179143257,
+  "mse": 399.12165393202696,
+  "noise_pct": 0.14386421346337913,
+  "params": {
+    "sigma_s": 100.0,
+    "sigma_r": 0.5,
+    "ms_sp": 10.0,
+    "ms_sr": 30.0,
+    "chroma_boost": 1.3,
+    "dust_threshold": 30.0,
+    "n_plates": 8.0
+  },
+  "timestamp": "2026-03-30T23:18:42.897795",
+  "iteration": 1
+}

@@ -1,0 +1,456 @@
+"""
+FastAPI backend for woodblock color separation.
+Run: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+"""
+import json
+import io
+import base64
+import os
+import shutil
+import time
+from PIL import Image
+import numpy as np
+from fastapi import FastAPI, File, Form, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response, JSONResponse
+from starlette.responses import StreamingResponse
+
+import separate as v3
+import separate_v2 as v2
+import separate_v4 as v4
+import separate_v5 as v5
+import separate_v6 as v6
+import separate_v7 as v7
+import separate_v8 as v8
+import separate_v9 as v9
+import separate_v10 as v10
+import separate_v11 as v11
+import separate_v12 as v12
+import separate_v13 as v13
+import separate_v14 as v14
+import separate_v15 as v15
+import separate_v16 as v16
+import separate_v17 as v17
+import separate_v18 as v18
+import separate_v19 as v19
+import separate_v20 as v20
+import auto_optimize
+
+app = FastAPI(title="Woodblock Color Separation API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def parse_locked_colors(raw: str | None) -> list[list[int]] | None:
+    if not raw:
+        return None
+    try:
+        colors = json.loads(raw)
+        if isinstance(colors, list) and len(colors) > 0:
+            return colors
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return None
+
+
+def get_module(version: str):
+    if version == "v20":
+        return v20
+    if version == "v19":
+        return v19
+    if version == "v18":
+        return v18
+    if version == "v17":
+        return v17
+    if version == "v16":
+        return v16
+    if version == "v15":
+        return v15
+    if version == "v14":
+        return v14
+    if version == "v13":
+        return v13
+    if version == "v12":
+        return v12
+    if version == "v11":
+        return v11
+    if version == "v10":
+        return v10
+    if version == "v9":
+        return v9
+    if version == "v8":
+        return v8
+    if version == "v7":
+        return v7
+    if version == "v6":
+        return v6
+    if version == "v5":
+        return v5
+    if version == "v4":
+        return v4
+    if version == "v2":
+        return v2
+    return v11
+
+
+@app.post("/api/preview")
+async def preview(
+    image: UploadFile = File(...),
+    plates: int = Form(3),
+    dust: int = Form(20),
+    use_edges: bool = Form(True),
+    edge_sigma: float = Form(1.5),
+    locked_colors: str | None = Form(None),
+    version: str = Form("v3"),
+    upscale: bool = Form(True),
+    median_size: int = Form(5),
+    chroma_boost: float = Form(1.3),
+    shadow_threshold: int = Form(8),
+    highlight_threshold: int = Form(95),
+    n_segments: int = Form(3000),
+    compactness: int = Form(15),
+    crf_spatial: int = Form(3),
+    crf_color: int = Form(13),
+    crf_compat: int = Form(10),
+    sigma_s: float = Form(100),
+    sigma_r: float = Form(0.5),
+    meanshift_sp: int = Form(15),
+    meanshift_sr: int = Form(30),
+    detail_strength: float = Form(0.5),
+):
+    image_bytes = await image.read()
+    locked = parse_locked_colors(locked_colors)
+    mod = get_module(version)
+
+    kwargs: dict = dict(
+        image_bytes=image_bytes, plates=plates, dust=dust,
+        use_edges=use_edges, edge_sigma=edge_sigma, locked_colors=locked,
+    )
+    if version == "v4":
+        kwargs["upscale"] = upscale
+        kwargs["median_size"] = median_size
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+    if version == "v6":
+        kwargs["n_segments"] = n_segments
+        kwargs["compactness"] = compactness
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+    if version == "v7":
+        kwargs["crf_spatial"] = crf_spatial
+        kwargs["crf_color"] = crf_color
+        kwargs["crf_compat"] = crf_compat
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+    if version == "v8":
+        kwargs["crf_spatial"] = crf_spatial
+        kwargs["crf_color"] = crf_color
+        kwargs["crf_compat"] = crf_compat
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+        kwargs["upscale"] = upscale
+    if version == "v9":
+        kwargs["sigma_s"] = sigma_s
+        kwargs["sigma_r"] = sigma_r
+        kwargs["meanshift_sp"] = meanshift_sp
+        kwargs["meanshift_sr"] = meanshift_sr
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+    if version in ("v10", "v11", "v12"):
+        kwargs["sigma_s"] = sigma_s
+        kwargs["sigma_r"] = sigma_r
+        kwargs["meanshift_sp"] = meanshift_sp
+        kwargs["meanshift_sr"] = meanshift_sr
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+    if version == "v13":
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+        kwargs["median_size"] = median_size
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+    if version == "v14":
+        kwargs["sigma_s"] = sigma_s
+        kwargs["sigma_r"] = sigma_r
+        kwargs["meanshift_sp"] = meanshift_sp
+        kwargs["meanshift_sr"] = meanshift_sr
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+        kwargs["median_size"] = median_size
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+        kwargs["detail_strength"] = detail_strength
+    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+        kwargs["median_size"] = median_size
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+    composite_bytes, manifest = mod.build_preview_response(**kwargs)
+
+    return Response(
+        content=composite_bytes,
+        media_type="image/png",
+        headers={"X-Manifest": json.dumps(manifest)},
+    )
+
+
+@app.post("/api/separate")
+async def separate_endpoint(
+    image: UploadFile = File(...),
+    plates: int = Form(3),
+    dust: int = Form(20),
+    use_edges: bool = Form(True),
+    edge_sigma: float = Form(1.5),
+    locked_colors: str | None = Form(None),
+    version: str = Form("v3"),
+    upscale: bool = Form(True),
+    median_size: int = Form(5),
+    chroma_boost: float = Form(1.3),
+    shadow_threshold: int = Form(8),
+    highlight_threshold: int = Form(95),
+    n_segments: int = Form(3000),
+    compactness: int = Form(15),
+    crf_spatial: int = Form(3),
+    crf_color: int = Form(13),
+    crf_compat: int = Form(10),
+    sigma_s: float = Form(100),
+    sigma_r: float = Form(0.5),
+    meanshift_sp: int = Form(15),
+    meanshift_sr: int = Form(30),
+    detail_strength: float = Form(0.5),
+):
+    image_bytes = await image.read()
+    locked = parse_locked_colors(locked_colors)
+    mod = get_module(version)
+
+    kwargs: dict = dict(
+        image_bytes=image_bytes, plates=plates, dust=dust,
+        use_edges=use_edges, edge_sigma=edge_sigma, locked_colors=locked,
+    )
+    if version == "v4":
+        kwargs["upscale"] = upscale
+        kwargs["median_size"] = median_size
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+    if version == "v6":
+        kwargs["n_segments"] = n_segments
+        kwargs["compactness"] = compactness
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+    if version == "v7":
+        kwargs["crf_spatial"] = crf_spatial
+        kwargs["crf_color"] = crf_color
+        kwargs["crf_compat"] = crf_compat
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+    if version == "v8":
+        kwargs["crf_spatial"] = crf_spatial
+        kwargs["crf_color"] = crf_color
+        kwargs["crf_compat"] = crf_compat
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+        kwargs["upscale"] = upscale
+    if version == "v9":
+        kwargs["sigma_s"] = sigma_s
+        kwargs["sigma_r"] = sigma_r
+        kwargs["meanshift_sp"] = meanshift_sp
+        kwargs["meanshift_sr"] = meanshift_sr
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+    if version in ("v10", "v11", "v12"):
+        kwargs["sigma_s"] = sigma_s
+        kwargs["sigma_r"] = sigma_r
+        kwargs["meanshift_sp"] = meanshift_sp
+        kwargs["meanshift_sr"] = meanshift_sr
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+    if version == "v13":
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+        kwargs["median_size"] = median_size
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+    if version == "v14":
+        kwargs["sigma_s"] = sigma_s
+        kwargs["sigma_r"] = sigma_r
+        kwargs["meanshift_sp"] = meanshift_sp
+        kwargs["meanshift_sr"] = meanshift_sr
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+        kwargs["median_size"] = median_size
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+        kwargs["detail_strength"] = detail_strength
+    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+        kwargs["median_size"] = median_size
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+    zip_bytes = mod.build_zip_response(**kwargs)
+
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=woodblock-plates.zip"},
+    )
+
+
+@app.post("/api/upscale")
+async def upscale_endpoint(image: UploadFile = File(...)):
+    """Pre-upscale an image and cache it for later processing."""
+    image_bytes = await image.read()
+    img_hash, cached, success = v11.upscale_and_cache(image_bytes)
+    return Response(
+        content=json.dumps({"hash": img_hash, "cached": cached, "upscaled": success}),
+        media_type="application/json",
+    )
+
+
+@app.post("/api/merge")
+async def merge_endpoint(
+    image: UploadFile = File(...),
+    merge_pairs: str = Form(...),
+    plates: int = Form(3),
+    dust: int = Form(20),
+    locked_colors: str | None = Form(None),
+    version: str = Form("v11"),
+    upscale: bool = Form(True),
+    chroma_boost: float = Form(1.3),
+    sigma_s: float = Form(100),
+    sigma_r: float = Form(0.5),
+    meanshift_sp: int = Form(15),
+    meanshift_sr: int = Form(30),
+    img_hash: str | None = Form(None),
+):
+    """Run separation then merge specified plate pairs."""
+    image_bytes = await image.read()
+    locked = parse_locked_colors(locked_colors)
+    pairs = json.loads(merge_pairs)
+
+    composite_bytes, manifest = v11.build_merge_response(
+        image_bytes=image_bytes,
+        merge_pairs=pairs,
+        plates=plates,
+        dust=dust,
+        locked_colors=locked,
+        chroma_boost=chroma_boost,
+        sigma_s=sigma_s,
+        sigma_r=sigma_r,
+        meanshift_sp=meanshift_sp,
+        meanshift_sr=meanshift_sr,
+        upscale=upscale,
+        img_hash=img_hash,
+    )
+
+    return Response(
+        content=composite_bytes,
+        media_type="image/png",
+        headers={"X-Manifest": json.dumps(manifest)},
+    )
+
+
+@app.post("/api/plates")
+async def plates_endpoint(
+    image: UploadFile = File(...),
+    plates: int = Form(3),
+    dust: int = Form(20),
+    version: str = Form("v11"),
+    upscale: bool = Form(True),
+    chroma_boost: float = Form(1.3),
+    sigma_s: float = Form(100),
+    sigma_r: float = Form(0.5),
+    meanshift_sp: int = Form(15),
+    meanshift_sr: int = Form(30),
+    locked_colors: str | None = Form(None),
+):
+    """Return JSON with base64-encoded plate thumbnail images (400px max)."""
+    image_bytes = await image.read()
+    if len(image_bytes) > 50 * 1024 * 1024:
+        return JSONResponse(status_code=413, content={"error": "File too large. Maximum 50MB."})
+    locked = parse_locked_colors(locked_colors)
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        img.load()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid image file"})
+
+    max_dim = 800
+    if max(img.size) > max_dim:
+        ratio = max_dim / max(img.size)
+        img = img.resize((int(img.size[0] * ratio), int(img.size[1] * ratio)), Image.LANCZOS)
+
+    plates = min(max(int(plates), 2), 35)
+    arr = np.array(img)
+    mod = get_module(version)
+    kwargs = dict(
+        n_plates=plates, dust_threshold=dust,
+        locked_colors=locked, return_data=True,
+        chroma_boost=chroma_boost,
+        upscale=False,
+    )
+    # Add version-specific params
+    if version in ("v9", "v10", "v11", "v12", "v14"):
+        kwargs.update(sigma_s=sigma_s, sigma_r=sigma_r, meanshift_sp=meanshift_sp, meanshift_sr=meanshift_sr)
+    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+        kwargs.update(use_edges=True, edge_sigma=1.5, shadow_threshold=8, highlight_threshold=95, median_size=3)
+    result = mod.separate(arr, **kwargs)
+
+    plate_images = []
+    for plate_info in result["manifest"]["plates"]:
+        name = plate_info["name"]
+        plate_data = result["plates"][name]
+        buf = io.BytesIO()
+        plate_data["image"].save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        plate_images.append({
+            "name": name,
+            "color": plate_info["color"],
+            "coverage": plate_info.get("coverage_pct", 0),
+            "image": f"data:image/png;base64,{b64}",
+        })
+
+    return Response(
+        content=json.dumps({"plates": plate_images}),
+        media_type="application/json",
+    )
+
+
+@app.post("/api/auto-optimize")
+async def auto_optimize_endpoint(
+    image: UploadFile = File(...),
+    plates: int = Form(8),
+):
+    """Trigger auto-optimization via OpenClaw. Returns job ID for polling."""
+    image_bytes = await image.read()
+    status = auto_optimize.trigger_optimization(image_bytes, initial_plates=plates)
+    return Response(
+        content=json.dumps(status),
+        media_type="application/json",
+    )
+
+
+@app.get("/api/auto-optimize/{job_id}")
+async def auto_optimize_status(job_id: str):
+    """Poll auto-optimization status."""
+    status = auto_optimize.get_status(job_id)
+    return Response(
+        content=json.dumps(status),
+        media_type="application/json",
+    )
