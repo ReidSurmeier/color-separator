@@ -166,27 +166,32 @@ export default function ColorSeparator() {
     [plates, dust, useEdges, edgeSigma, colors, version, upscale, medianSize, chromaBoost, shadowThreshold, highlightThreshold, nSegments, compactness, crfSpatial, crfColor, crfCompat, sigmaS, sigmaR, meanshiftSp, meanshiftSr, detailStrength],
   );
 
-  const startProgress = useCallback((hasUpscaleStep: boolean) => {
+  const startProgress = useCallback((isSam: boolean) => {
     if (progressTimerRef.current) clearInterval(progressTimerRef.current);
     setProgressPct(0);
-    setProgressStage(hasUpscaleStep ? "Upscaling (4x)" : "Separating colors");
-    const stages = hasUpscaleStep
+    const stages = isSam
       ? [
-          { at: 0, label: "Upscaling (4x)" },
-          { at: 40, label: "Separating colors" },
-          { at: 80, label: "Cleaning up" },
+          { at: 0, label: "Segmenting objects" },
+          { at: 20, label: "Clustering colors" },
+          { at: 45, label: "Smoothing plates" },
+          { at: 65, label: "Filling strokes" },
+          { at: 78, label: "Detecting edges" },
+          { at: 88, label: "Cleaning up" },
         ]
       : [
           { at: 0, label: "Separating colors" },
           { at: 70, label: "Cleaning up" },
         ];
+    setProgressStage(stages[0].label);
     let pct = 0;
+    // SAM versions take ~15-20s, others ~2-3s
+    const interval = isSam ? 400 : 200;
     progressTimerRef.current = setInterval(() => {
       pct = Math.min(pct + 1, 95);
       setProgressPct(pct);
       const stage = [...stages].reverse().find((s) => pct >= s.at);
       if (stage) setProgressStage(stage.label);
-    }, 200);
+    }, interval);
   }, []);
 
   const stopProgress = useCallback(() => {
@@ -244,19 +249,12 @@ export default function ColorSeparator() {
       setPlateImages([]);
       setIsLoadingPlates(true);
       const isSamVersion = ["v15","v16","v17","v18","v19","v20"].includes(params.version);
-      if (!isSamVersion) {
-        startProgress((["v4","v9","v10","v11","v12","v13","v14"].includes(params.version)) && params.upscale !== false);
-      } else {
-        setProgressPct(0);
-        setProgressStage("Starting...");
-      }
+      startProgress(isSamVersion
+        ? true  // SAM versions: use slow progress (longer stages)
+        : (["v4","v9","v10","v11","v12","v13","v14"].includes(params.version)) && params.upscale !== false
+      );
       try {
-        const result: PreviewResult = isSamVersion
-          ? await fetchPreviewStream(currentFile, params, (stage, pct) => {
-              setProgressStage(stage);
-              setProgressPct(pct);
-            })
-          : await fetchPreview(currentFile, params);
+        const result: PreviewResult = await fetchPreview(currentFile, params);
         if (compositeUrlRef.current) URL.revokeObjectURL(compositeUrlRef.current);
         compositeUrlRef.current = result.compositeUrl;
         setCompositeUrl(result.compositeUrl);
@@ -279,13 +277,7 @@ export default function ColorSeparator() {
       } catch (err) {
         console.error("Preview failed:", err);
       } finally {
-        if (!isSamVersion) {
-          stopProgress();
-        } else {
-          // SSE already set progress to 100 via 'complete' event
-          setProgressPct(100);
-          setTimeout(() => setProgressStage(null), 500);
-        }
+        stopProgress();
         setIsLoading(false);
       }
     },
