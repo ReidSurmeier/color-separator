@@ -4,7 +4,6 @@
 
 [![CI](https://github.com/ReidSurmeier/color-separator/actions/workflows/ci.yml/badge.svg)](https://github.com/ReidSurmeier/color-separator/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/gh/ReidSurmeier/color-separator/branch/master/graph/badge.svg)](https://codecov.io/gh/ReidSurmeier/color-separator)
-[![FOSSA](https://app.fossa.com/api/projects/git%2Bgithub.com%2FReidSurmeier%2Fcolor-separator.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FReidSurmeier%2Fcolor-separator)
 [![Live](https://img.shields.io/badge/live-tools.reidsurmeier.wtf-black?style=flat-square)](https://tools.reidsurmeier.wtf/color-separator)
 [![Versions](https://img.shields.io/badge/algorithms-20-blue?style=flat-square)](#algorithms)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square)](https://nextjs.org)
