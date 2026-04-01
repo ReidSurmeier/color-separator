@@ -73,6 +73,10 @@ export async function fetchPreview(
     body: fd,
   });
 
+  if (res.status === 503) {
+    const err = await res.json();
+    throw new Error(err.error || "Server overloaded — not enough memory for SAM processing");
+  }
   if (!res.ok) {
     throw new Error(`Preview failed: ${res.status}`);
   }
@@ -109,6 +113,10 @@ export async function fetchSeparation(
     body: fd,
   });
 
+  if (res.status === 503) {
+    const err = await res.json();
+    throw new Error(err.error || "Server overloaded — not enough memory for SAM processing");
+  }
   if (!res.ok) {
     throw new Error(`Separation failed: ${res.status}`);
   }
@@ -199,6 +207,10 @@ export async function fetchMerge(
     method: "POST",
     body: fd,
   });
+  if (res.status === 503) {
+    const err = await res.json();
+    throw new Error(err.error || "Server overloaded — not enough memory for SAM processing");
+  }
   if (!res.ok) {
     throw new Error(`Merge failed: ${res.status}`);
   }
@@ -233,6 +245,10 @@ export async function fetchPreviewStream(
     method: "POST",
     body: fd,
   });
+  if (res.status === 503) {
+    const err = await res.json();
+    throw new Error(err.error || "Server overloaded — not enough memory for SAM processing");
+  }
   if (!res.ok) throw new Error(`Preview stream failed: ${res.status}`);
 
   const reader = res.body?.getReader();

@@ -12,6 +12,7 @@ import shutil
 import time
 from PIL import Image
 import numpy as np
+import psutil
 from fastapi import FastAPI, File, Form, UploadFile
 
 # HEIF/HEIC image support
@@ -130,6 +131,53 @@ def get_module(version: str):
     return v11
 
 
+SAM_VERSIONS = ("v15", "v16", "v17", "v18", "v19", "v20")
+
+
+def check_memory_for_sam():
+    """Check if enough memory is available for SAM processing.
+    Returns (ok: bool, message: str)"""
+    mem = psutil.virtual_memory()
+    swap = psutil.swap_memory()
+    available_gb = (mem.available + swap.free) / (1024**3)
+
+    # SAM needs ~10GB peak, but if model is already cached, needs much less
+    sam_cached = False
+    try:
+        from separate_v20 import _sam_model
+        sam_cached = _sam_model is not None
+    except ImportError:
+        pass
+
+    required_gb = 3.0 if sam_cached else 8.0
+
+    if available_gb < required_gb:
+        return False, f"Insufficient memory: {available_gb:.1f}GB available, need {required_gb:.1f}GB. System has 16GB total."
+    return True, "OK"
+
+
+@app.get("/api/health")
+async def health():
+    mem = psutil.virtual_memory()
+    swap = psutil.swap_memory()
+    sam_cached = False
+    try:
+        from separate_v20 import _sam_model
+        sam_cached = _sam_model is not None
+    except ImportError:
+        pass
+    return {
+        "status": "ok",
+        "memory": {
+            "total_gb": round(mem.total / 1024**3, 1),
+            "available_gb": round(mem.available / 1024**3, 1),
+            "used_pct": mem.percent,
+            "swap_free_gb": round(swap.free / 1024**3, 1),
+        },
+        "sam_cached": sam_cached,
+    }
+
+
 @app.post("/api/preview")
 async def preview(
     image: UploadFile = File(...),
@@ -225,14 +273,19 @@ async def preview(
         kwargs["chroma_boost"] = chroma_boost
         kwargs["upscale"] = upscale
         kwargs["detail_strength"] = detail_strength
-    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+    if version in SAM_VERSIONS:
         kwargs["shadow_threshold"] = shadow_threshold
         kwargs["highlight_threshold"] = highlight_threshold
         kwargs["median_size"] = median_size
         kwargs["chroma_boost"] = chroma_boost
         kwargs["upscale"] = upscale
+    if version == "v20":
+        kwargs["upscale"] = False  # OOM risk on 16GB systems
 
-    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+    if version in SAM_VERSIONS:
+        ok, msg = check_memory_for_sam()
+        if not ok:
+            return JSONResponse(status_code=503, content={"error": msg, "code": "MEMORY_LOW"})
         async with _heavy_semaphore:
             composite_bytes, manifest = mod.build_preview_response(**kwargs)
         gc.collect()
@@ -278,7 +331,7 @@ async def preview_stream(
         image_bytes=image_bytes, plates=plates, dust=dust,
         use_edges=use_edges, edge_sigma=edge_sigma, locked_colors=locked,
     )
-    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+    if version in SAM_VERSIONS:
         kwargs["shadow_threshold"] = shadow_threshold
         kwargs["highlight_threshold"] = highlight_threshold
         kwargs["median_size"] = median_size
@@ -302,6 +355,13 @@ async def preview_stream(
         kwargs["meanshift_sr"] = meanshift_sr
         kwargs["chroma_boost"] = chroma_boost
         kwargs["upscale"] = upscale
+    if version == "v20":
+        kwargs["upscale"] = False  # OOM risk on 16GB systems
+
+    if version in SAM_VERSIONS:
+        ok, msg = check_memory_for_sam()
+        if not ok:
+            return JSONResponse(status_code=503, content={"error": msg, "code": "MEMORY_LOW"})
 
     progress_events: list[dict] = []
 
@@ -438,13 +498,19 @@ async def separate_endpoint(
         kwargs["chroma_boost"] = chroma_boost
         kwargs["upscale"] = upscale
         kwargs["detail_strength"] = detail_strength
-    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+    if version in SAM_VERSIONS:
         kwargs["shadow_threshold"] = shadow_threshold
         kwargs["highlight_threshold"] = highlight_threshold
         kwargs["median_size"] = median_size
         kwargs["chroma_boost"] = chroma_boost
         kwargs["upscale"] = upscale
-    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+    if version == "v20":
+        kwargs["upscale"] = False  # OOM risk on 16GB systems
+
+    if version in SAM_VERSIONS:
+        ok, msg = check_memory_for_sam()
+        if not ok:
+            return JSONResponse(status_code=503, content={"error": msg, "code": "MEMORY_LOW"})
         async with _heavy_semaphore:
             zip_bytes = mod.build_zip_response(**kwargs)
         gc.collect()
@@ -498,7 +564,13 @@ async def merge_endpoint(
 
     merge_mod = VERSION_MAP.get(version, v11)
 
-    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+    if version == "v20":
+        upscale = False  # OOM risk on 16GB systems
+
+    if version in SAM_VERSIONS:
+        ok, msg = check_memory_for_sam()
+        if not ok:
+            return JSONResponse(status_code=503, content={"error": msg, "code": "MEMORY_LOW"})
         async with _heavy_semaphore:
             composite_bytes, manifest = merge_mod.build_merge_response(
                 image_bytes=image_bytes,
@@ -583,10 +655,13 @@ async def plates_endpoint(
     # Add version-specific params
     if version in ("v9", "v10", "v11", "v12", "v14"):
         kwargs.update(sigma_s=sigma_s, sigma_r=sigma_r, meanshift_sp=meanshift_sp, meanshift_sr=meanshift_sr)
-    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+    if version in SAM_VERSIONS:
         kwargs.update(use_edges=True, edge_sigma=1.5, shadow_threshold=8, highlight_threshold=95, median_size=3)
 
-    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+    if version in SAM_VERSIONS:
+        ok, msg = check_memory_for_sam()
+        if not ok:
+            return JSONResponse(status_code=503, content={"error": msg, "code": "MEMORY_LOW"})
         async with _heavy_semaphore:
             result = mod.separate(arr, **kwargs)
         gc.collect()

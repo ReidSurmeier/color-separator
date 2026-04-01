@@ -276,6 +276,8 @@ export default function ColorSeparator() {
         fetchPlateImagesFromApi(currentFile, params);
       } catch (err) {
         console.error("Preview failed:", err);
+        setProgressStage(err instanceof Error ? err.message : "Preview failed");
+        setTimeout(() => setProgressStage(null), 3000);
       } finally {
         stopProgress();
         setIsLoading(false);
