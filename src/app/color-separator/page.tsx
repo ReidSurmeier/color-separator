@@ -900,6 +900,28 @@ export default function ColorSeparator() {
         <a href="https://github.com/ReidSurmeier/color-separator" target="_blank" rel="noreferrer" style={{display:"inline-block",background:"#ddd",padding:"2px 4px",margin:"0 2px",fontSize:14,textDecoration:"none",color:"inherit",cursor:"pointer"}}>
           github
         </a>
+
+        {(imageInfo || manifest) && (
+          <div className="data-box">
+            <h3>data</h3>
+            {imageInfo && (
+              <>
+                <div className="data-row"><span>size</span><span>{imageInfo.width}×{imageInfo.height}</span></div>
+                <div className="data-row"><span>file</span><span>{imageInfo.size}</span></div>
+                <div className="data-row"><span>type</span><span>{imageInfo.type}</span></div>
+              </>
+            )}
+            {manifest && (
+              <>
+                <div className="data-row"><span>plates</span><span>{manifest.plates.length}</span></div>
+                {manifest.upscaled && <div className="data-row"><span>upscaled</span><span>2×</span></div>}
+                {manifest.ai_analysis && (
+                  <div className="data-row"><span>ai score</span><span>{manifest.ai_analysis.quality_score}/100</span></div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* About overlay */}
