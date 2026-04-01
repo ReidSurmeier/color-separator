@@ -130,19 +130,11 @@ def get_sam_model():
 
 
 def release_sam():
-    """Free SAM model to reclaim ~2GB RAM."""
-    global _sam_model
-    if _sam_model is not None:
-        import gc
-        del _sam_model
-        _sam_model = None
-        gc.collect()
-        try:
-            import torch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except ImportError:
-            pass
+    """No-op — keep SAM cached in RAM for subsequent requests.
+    Loading SAM is the expensive part (~2GB, ~3s). Once loaded,
+    reuse is cheap. On 16GB machines, releasing + reloading each
+    request causes repeated OOM spikes."""
+    pass
 
 
 def release_upscaler():
