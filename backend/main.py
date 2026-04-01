@@ -2,6 +2,8 @@
 FastAPI backend for woodblock color separation.
 Run: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 """
+import asyncio
+import gc
 import json
 import io
 import base64
@@ -11,6 +13,16 @@ import time
 from PIL import Image
 import numpy as np
 from fastapi import FastAPI, File, Form, UploadFile
+
+# HEIF/HEIC image support
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pass
+
+# Concurrency limit: only 1 heavy (v15+) request at a time to prevent OOM
+_heavy_semaphore = asyncio.Semaphore(1)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse
 from starlette.responses import StreamingResponse
@@ -219,7 +231,13 @@ async def preview(
         kwargs["median_size"] = median_size
         kwargs["chroma_boost"] = chroma_boost
         kwargs["upscale"] = upscale
-    composite_bytes, manifest = mod.build_preview_response(**kwargs)
+
+    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+        async with _heavy_semaphore:
+            composite_bytes, manifest = mod.build_preview_response(**kwargs)
+        gc.collect()
+    else:
+        composite_bytes, manifest = mod.build_preview_response(**kwargs)
 
     return Response(
         content=composite_bytes,
@@ -329,7 +347,12 @@ async def separate_endpoint(
         kwargs["median_size"] = median_size
         kwargs["chroma_boost"] = chroma_boost
         kwargs["upscale"] = upscale
-    zip_bytes = mod.build_zip_response(**kwargs)
+    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+        async with _heavy_semaphore:
+            zip_bytes = mod.build_zip_response(**kwargs)
+        gc.collect()
+    else:
+        zip_bytes = mod.build_zip_response(**kwargs)
 
     return Response(
         content=zip_bytes,
@@ -377,20 +400,39 @@ async def merge_endpoint(
     pairs = json.loads(merge_pairs)
 
     merge_mod = VERSION_MAP.get(version, v11)
-    composite_bytes, manifest = merge_mod.build_merge_response(
-        image_bytes=image_bytes,
-        merge_pairs=pairs,
-        plates=plates,
-        dust=dust,
-        locked_colors=locked,
-        chroma_boost=chroma_boost,
-        sigma_s=sigma_s,
-        sigma_r=sigma_r,
-        meanshift_sp=meanshift_sp,
-        meanshift_sr=meanshift_sr,
-        upscale=upscale,
-        img_hash=img_hash,
-    )
+
+    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+        async with _heavy_semaphore:
+            composite_bytes, manifest = merge_mod.build_merge_response(
+                image_bytes=image_bytes,
+                merge_pairs=pairs,
+                plates=plates,
+                dust=dust,
+                locked_colors=locked,
+                chroma_boost=chroma_boost,
+                sigma_s=sigma_s,
+                sigma_r=sigma_r,
+                meanshift_sp=meanshift_sp,
+                meanshift_sr=meanshift_sr,
+                upscale=upscale,
+                img_hash=img_hash,
+            )
+        gc.collect()
+    else:
+        composite_bytes, manifest = merge_mod.build_merge_response(
+            image_bytes=image_bytes,
+            merge_pairs=pairs,
+            plates=plates,
+            dust=dust,
+            locked_colors=locked,
+            chroma_boost=chroma_boost,
+            sigma_s=sigma_s,
+            sigma_r=sigma_r,
+            meanshift_sp=meanshift_sp,
+            meanshift_sr=meanshift_sr,
+            upscale=upscale,
+            img_hash=img_hash,
+        )
 
     return Response(
         content=composite_bytes,
@@ -446,7 +488,13 @@ async def plates_endpoint(
         kwargs.update(sigma_s=sigma_s, sigma_r=sigma_r, meanshift_sp=meanshift_sp, meanshift_sr=meanshift_sr)
     if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
         kwargs.update(use_edges=True, edge_sigma=1.5, shadow_threshold=8, highlight_threshold=95, median_size=3)
-    result = mod.separate(arr, **kwargs)
+
+    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+        async with _heavy_semaphore:
+            result = mod.separate(arr, **kwargs)
+        gc.collect()
+    else:
+        result = mod.separate(arr, **kwargs)
 
     plate_images = []
     for plate_info in result["manifest"]["plates"]:
