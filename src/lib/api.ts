@@ -33,7 +33,7 @@ function buildFormData(file: File, params: SeparationParams): FormData {
     if (params.shadowThreshold !== undefined) fd.append("shadow_threshold", String(params.shadowThreshold));
     if (params.highlightThreshold !== undefined) fd.append("highlight_threshold", String(params.highlightThreshold));
   }
-  if (params.version === "v9" || params.version === "v10" || params.version === "v11") {
+  if (["v9","v10","v11","v12","v13"].includes(params.version)) {
     if (params.sigmaS !== undefined) fd.append("sigma_s", String(params.sigmaS));
     if (params.sigmaR !== undefined) fd.append("sigma_r", String(params.sigmaR));
     if (params.meanshiftSp !== undefined) fd.append("meanshift_sp", String(params.meanshiftSp));
@@ -49,6 +49,13 @@ function buildFormData(file: File, params: SeparationParams): FormData {
     if (params.chromaBoost !== undefined) fd.append("chroma_boost", String(params.chromaBoost));
     if (params.upscale !== undefined) fd.append("upscale", String(params.upscale));
     if (params.detailStrength !== undefined) fd.append("detail_strength", String(params.detailStrength));
+  }
+  if (["v15","v16","v17","v18","v19","v20"].includes(params.version)) {
+    if (params.upscale !== undefined) fd.append("upscale", String(params.upscale));
+    if (params.chromaBoost !== undefined) fd.append("chroma_boost", String(params.chromaBoost));
+    if (params.shadowThreshold !== undefined) fd.append("shadow_threshold", String(params.shadowThreshold));
+    if (params.highlightThreshold !== undefined) fd.append("highlight_threshold", String(params.highlightThreshold));
+    if (params.medianSize !== undefined) fd.append("median_size", String(params.medianSize));
   }
   if (params.lockedColors.length > 0) {
     fd.append("locked_colors", JSON.stringify(params.lockedColors));
