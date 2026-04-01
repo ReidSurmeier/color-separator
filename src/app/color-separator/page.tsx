@@ -324,8 +324,8 @@ export default function ColorSeparator() {
       cleanupPlateUrls();
       setCachedZipBlob(null);
 
-      // Fire upscale-on-upload if upscale is toggled on
-      if (upscale) {
+      // Fire upscale-on-upload if upscale is toggled on (skip for v20 — OOM risk)
+      if (upscale && version !== "v20") {
         setIsUpscaling(true);
         fetchUpscale(f)
           .then((result) => {
