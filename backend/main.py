@@ -52,6 +52,7 @@ except ImportError:
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50MB
 Image.MAX_IMAGE_PIXELS = 50_000_000  # Prevent decompression bombs
 
+
 async def validate_upload(image_bytes: bytes):
     """Validate uploaded image. Returns error response or None if valid."""
     if len(image_bytes) > MAX_UPLOAD_BYTES:
@@ -93,6 +94,7 @@ VERSION_MAP = {
         "v17": v17, "v18": v18, "v19": v19, "v20": v20,
     }.items() if mod is not None
 }
+
 
 def get_module(version: str):
     return VERSION_MAP.get(version, v20)  # default to v20 (best)
