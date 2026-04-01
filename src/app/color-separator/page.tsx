@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useState, useCallback, useRef, useEffect, type ChangeEvent } from "react";
-import { fetchPreview, fetchSeparation, fetchAutoOptimize, fetchUpscale, fetchMerge } from "@/lib/api";
+import { fetchPreview, fetchSeparation, fetchUpscale, fetchMerge } from "@/lib/api";
 import { rgbToHex, hexToRgb } from "@/lib/colors";
-import type { SeparationParams, Manifest, PreviewResult, OptimizeIteration } from "@/lib/types";
+import type { SeparationParams, Manifest, PreviewResult } from "@/lib/types";
 import JSZip from "jszip";
 
 type VersionId = SeparationParams["version"];
@@ -46,6 +46,7 @@ interface PlateImage {
 export default function ColorSeparator() {
   const [file, setFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string>("");
+  const [imageInfo, setImageInfo] = useState<{width:number,height:number,size:string,type:string} | null>(null);
   const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [compositeUrl, setCompositeUrl] = useState<string | null>(null);
   const [manifest, setManifest] = useState<Manifest | null>(null);
@@ -74,8 +75,6 @@ export default function ColorSeparator() {
   const [progressStage, setProgressStage] = useState<string | null>(null);
   const [progressPct, setProgressPct] = useState(0);
   const progressTimerRef = useRef<ReturnType<typeof setInterval>>(null);
-  const [optimizeStatus, setOptimizeStatus] = useState<string | null>(null);
-  const [isOptimizing, setIsOptimizing] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [upscaleHash, setUpscaleHash] = useState<string | null>(null);
@@ -291,6 +290,18 @@ export default function ColorSeparator() {
       if (!f) return;
       setFile(f);
       setFileName(f.name);
+      const imgEl = new window.Image();
+      const objUrl = URL.createObjectURL(f);
+      imgEl.onload = () => {
+        setImageInfo({
+          width: imgEl.naturalWidth,
+          height: imgEl.naturalHeight,
+          size: f.size > 1024*1024 ? (f.size/1024/1024).toFixed(1)+"MB" : Math.round(f.size/1024)+"KB",
+          type: f.type.replace("image/","") || "unknown"
+        });
+        URL.revokeObjectURL(objUrl);
+      };
+      imgEl.src = objUrl;
       setUpscaleHash(null);
       if (sourceUrlRef.current) URL.revokeObjectURL(sourceUrlRef.current);
       const url = URL.createObjectURL(f);
@@ -525,31 +536,6 @@ export default function ColorSeparator() {
     }
   }, [file, getParams, cachedZipBlob, manifest, compositeUrl, plateImages, generateDiagram]);
 
-  const handleAutoOptimize = useCallback(async () => {
-    if (!file) return;
-    setIsOptimizing(true);
-    setOptimizeStatus("starting optimization...");
-    try {
-      await fetchAutoOptimize(file, plates, (data: OptimizeIteration) => {
-        if (data.error) {
-          setOptimizeStatus(`error: ${data.error}`);
-          return;
-        }
-        const score = data.score ?? data.best_score ?? 0;
-        setOptimizeStatus(
-          `iteration ${data.iteration}: score ${score}/100${data.done ? " — done!" : ""}`
-        );
-        if (data.done && data.manifest) {
-          setManifest(data.manifest);
-        }
-      });
-    } catch (err) {
-      console.error("Auto-optimize failed:", err);
-      setOptimizeStatus("failed");
-    } finally {
-      setIsOptimizing(false);
-    }
-  }, [file, plates]);
 
   const canCompare = compositeUrl !== null && sourceUrl !== null;
   const displayImage = showOriginal && canCompare ? sourceUrl : (compositeUrl ?? sourceUrl);
@@ -599,7 +585,7 @@ export default function ColorSeparator() {
 
         {/* Source */}
         <h3>source</h3>
-        <button onClick={() => fileInputRef.current?.click()}>
+        <button className="source-btn" onClick={() => fileInputRef.current?.click()}>
           {fileName || "choose file"}
         </button>
         <input
@@ -882,13 +868,13 @@ export default function ColorSeparator() {
           {mergeMode ? "cancel" : "select plates"}
         </button>
         {mergeMode && selectedForMerge.length >= 2 && (
-          <button className="process-btn" onClick={async () => {
+          <button className="process-btn" disabled={isMerging} onClick={async () => {
             if (!file || selectedForMerge.length < 2) return;
             setIsMerging(true);
             try {
               const pairs: number[][] = [];
-              for (let i = 0; i < selectedForMerge.length - 1; i++) {
-                pairs.push([selectedForMerge[i], selectedForMerge[i + 1]]);
+              for (let i = 1; i < selectedForMerge.length; i++) {
+                pairs.push([selectedForMerge[0], selectedForMerge[i]]);
               }
               const result = await fetchMerge(file, getParams(), pairs, upscaleHash);
               if (compositeUrlRef.current) URL.revokeObjectURL(compositeUrlRef.current);
@@ -903,18 +889,9 @@ export default function ColorSeparator() {
               fetchPlateImagesFromApi(file, getParams());
             } catch (err) { console.error("Merge failed:", err); }
             finally { setIsMerging(false); }
-          }}>merge {selectedForMerge.length} plates</button>
+          }}>{isMerging ? "merging..." : `merge ${selectedForMerge.length} plates`}</button>
         )}
         {mergeMode && <div style={{fontSize:11,color:'#999',marginTop:4}}>click plates to select ({selectedForMerge.length} selected)</div>}
-
-        {/* Auto-optimize */}
-        <h3>auto-optimize</h3>
-        <button onClick={handleAutoOptimize} disabled={!file || isOptimizing}>
-          {isOptimizing ? "optimizing..." : "optimize"}
-        </button>
-        {optimizeStatus && (
-          <span className="optimize-status">{optimizeStatus}</span>
-        )}
 
         <h3>about</h3>
         <button onClick={() => setShowAbout(a => !a)}>
@@ -1019,8 +996,25 @@ export default function ColorSeparator() {
         {(plateImages.length > 0 || isLoadingPlates) && (
           <div className="plates-section">
             <h3 className="plates-section-title">plates ({plateImages.length})</h3>
+            {isMerging && (
+              <div className="merge-progress-overlay">
+                <div className="merge-spinner" />
+                <span>merging plates...</span>
+              </div>
+            )}
             {isLoadingPlates && (
-              <div className="plates-loading">loading plates...</div>
+              <div className="plates-grid">
+                {Array.from({ length: plates }).map((_, i) => (
+                  <div key={i} className="plate-card plate-skeleton">
+                    <div className="plate-card-image plate-skeleton-img" />
+                    <div className="plate-card-info">
+                      <div className="plate-skeleton-swatch" />
+                      <div className="plate-skeleton-text" />
+                      <div className="plate-skeleton-text short" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
             <div className="plates-grid">
               {plateImages.map((plate, i) => (

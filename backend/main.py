@@ -360,7 +360,14 @@ async def merge_endpoint(
     locked = parse_locked_colors(locked_colors)
     pairs = json.loads(merge_pairs)
 
-    composite_bytes, manifest = v11.build_merge_response(
+    _merge_versions = {
+        "v3": v3, "v2": v2, "v4": v4, "v5": v5, "v6": v6, "v7": v7,
+        "v8": v8, "v9": v9, "v10": v10, "v11": v11, "v12": v12, "v13": v13,
+        "v14": v14, "v15": v15, "v16": v16, "v17": v17, "v18": v18,
+        "v19": v19, "v20": v20,
+    }
+    merge_mod = _merge_versions.get(version, v11)
+    composite_bytes, manifest = merge_mod.build_merge_response(
         image_bytes=image_bytes,
         merge_pairs=pairs,
         plates=plates,

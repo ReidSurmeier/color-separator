@@ -216,6 +216,7 @@ class TestEdgeDetection:
 
 # ── Upscale Endpoint ──
 
+@pytest.mark.gpu
 class TestUpscaleEndpoint:
     def test_upscale_returns_json(self, client, sample_png):
         resp = client.post("/api/upscale", files={"image": ("test.png", sample_png, "image/png")})
