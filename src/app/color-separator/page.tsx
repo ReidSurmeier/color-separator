@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useCallback, useRef, useEffect, type ChangeEvent } from "react";
-import { fetchPreview, fetchSeparation, fetchUpscale, fetchMerge } from "@/lib/api";
+import { fetchPreview, fetchPreviewStream, fetchSeparation, fetchUpscale, fetchMerge } from "@/lib/api";
 import { rgbToHex, hexToRgb } from "@/lib/colors";
 import type { SeparationParams, Manifest, PreviewResult } from "@/lib/types";
 import JSZip from "jszip";
@@ -242,9 +242,20 @@ export default function ColorSeparator() {
       setIsLoading(true);
       setPlateImages([]);
       setIsLoadingPlates(true);
-      startProgress((["v4","v9","v10","v11","v12","v13","v14","v15","v16","v17","v18","v19","v20"].includes(params.version)) && params.upscale !== false);
+      const isSamVersion = ["v15","v16","v17","v18","v19","v20"].includes(params.version);
+      if (!isSamVersion) {
+        startProgress((["v4","v9","v10","v11","v12","v13","v14"].includes(params.version)) && params.upscale !== false);
+      } else {
+        setProgressPct(0);
+        setProgressStage("Starting...");
+      }
       try {
-        const result: PreviewResult = await fetchPreview(currentFile, params);
+        const result: PreviewResult = isSamVersion
+          ? await fetchPreviewStream(currentFile, params, (stage, pct) => {
+              setProgressStage(stage);
+              setProgressPct(pct);
+            })
+          : await fetchPreview(currentFile, params);
         if (compositeUrlRef.current) URL.revokeObjectURL(compositeUrlRef.current);
         compositeUrlRef.current = result.compositeUrl;
         setCompositeUrl(result.compositeUrl);

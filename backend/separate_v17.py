@@ -181,10 +181,15 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
              chroma_boost=1.3,
              shadow_threshold=8, highlight_threshold=95,
              median_size=3,
-             upscale=True, img_hash=None):
+             upscale=True, img_hash=None,
+             progress_callback=None):
     """
     V15 separation: SAM segmentation -> per-region K-means -> Canny edges -> CC cleanup.
     """
+    def report(stage, pct):
+        if progress_callback:
+            progress_callback(stage, pct)
+
     # Load image
     if isinstance(input_path_or_array, str):
         img = Image.open(input_path_or_array).convert("RGB")
@@ -193,6 +198,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
         arr = input_path_or_array
         img = Image.fromarray(arr)
 
+    report("Upscaling image (2x)", 5)
     # ── Step 0: Optional Real-ESRGAN 2x upscale ──
     was_upscaled = False
     if upscale:
@@ -212,6 +218,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
+    report("Detecting strokes", 15)
     # ── Step 0.5: Line-aware pre-pass — detect thin dark strokes ──
     # Convert to grayscale and find dark strokes (signatures, text, fine linework)
     gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
@@ -252,6 +259,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
     stroke_mask_bool = stroke_mask.astype(bool)
     n_stroke_pixels = np.sum(stroke_mask_bool)
 
+    report("Segmenting objects (SAM)", 25)
     # ── Step 1: SAM segmentation ──
     import torch
     if torch.cuda.is_available():
@@ -278,6 +286,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
     masks = results[0].masks.data.cpu().numpy()
     release_sam()  # Free GPU for ESRGAN
 
+    report("Merging regions", 40)
     # ── Step 2: Merge overlapping/small SAM masks into coherent regions ──
     region_map = np.zeros((h, w), dtype=np.int32)
     mask_areas = [(i, m.sum()) for i, m in enumerate(masks)]
@@ -341,6 +350,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
     unique_regions = unique_regions[unique_regions > 0]
     n_sam_masks = len(masks)
 
+    report("Clustering colors", 50)
     # ── Step 3: Per-region K-means clustering ──
     arr_float = arr.astype(np.float64) / 255.0
     lab_img = rgb2lab(arr_float)
@@ -421,6 +431,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
         region_labels = np.argmin(dists, axis=1)
         pixel_labels[region_mask] = region_labels
 
+    report("Smoothing plates", 65)
     # ── Step 4: Median filter + morphological cleanup ──
     # Median filter first to remove salt-and-pepper noise
     median_size_val = min(max(1, int(median_size)), 5)
@@ -467,6 +478,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
     if np.any(dark_stroke_mask):
         pixel_labels[dark_stroke_mask] = darkest_plate
 
+    report("Detecting edges", 82)
     # ── Step 5: Canny edge assignment ──
     if use_edges:
         from skimage.color import rgb2gray
@@ -493,9 +505,11 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
                 darkest = min(plates_nearby, key=lambda p: palette_lab[p][0])
                 pixel_labels[y, x] = darkest
 
+    report("Correcting holes", 88)
     # ── Step 6: CC cleanup ──
     pixel_labels = connected_component_cleanup(pixel_labels, n_plates, dust_threshold)
 
+    report("Cleaning up", 95)
     # ── Step 7: Get palette RGB ──
     palette_lab = palette_lab_boosted.copy()
     palette_lab[:, 1] /= chroma_boost
@@ -634,7 +648,8 @@ def build_preview_response(image_bytes, plates=4, dust=50,
                            use_edges=True, edge_sigma=1.5,
                            shadow_threshold=8, highlight_threshold=95,
                            median_size=3,
-                           upscale=True, img_hash=None, **kwargs):
+                           upscale=True, img_hash=None,
+                           progress_callback=None, **kwargs):
     """Process image and return composite PNG bytes + manifest."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
@@ -653,6 +668,7 @@ def build_preview_response(image_bytes, plates=4, dust=50,
         shadow_threshold=shadow_threshold, highlight_threshold=highlight_threshold,
         median_size=median_size,
         upscale=upscale, img_hash=img_hash,
+        progress_callback=progress_callback,
     )
 
     buf = io.BytesIO()
@@ -762,7 +778,8 @@ def build_zip_response(image_bytes, plates=4, dust=50,
                        use_edges=True, edge_sigma=1.5,
                        shadow_threshold=8, highlight_threshold=95,
                        median_size=3,
-                       upscale=True, img_hash=None, **kwargs):
+                       upscale=True, img_hash=None,
+                       progress_callback=None, **kwargs):
     """Process image and return ZIP bytes containing all outputs."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
@@ -781,6 +798,7 @@ def build_zip_response(image_bytes, plates=4, dust=50,
         shadow_threshold=shadow_threshold, highlight_threshold=highlight_threshold,
         median_size=median_size,
         upscale=upscale, img_hash=img_hash,
+        progress_callback=progress_callback,
     )
 
     zip_buf = io.BytesIO()

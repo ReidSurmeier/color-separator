@@ -215,3 +215,60 @@ export async function fetchMerge(
   const compositeUrl = URL.createObjectURL(blob);
   return { compositeUrl, manifest };
 }
+
+export async function fetchPreviewStream(
+  file: File,
+  params: SeparationParams,
+  onProgress: (stage: string, pct: number) => void,
+): Promise<PreviewResult> {
+  const fd = buildFormData(file, params);
+  const res = await fetch(`${BACKEND_URL}/api/preview-stream`, {
+    method: "POST",
+    body: fd,
+  });
+  if (!res.ok) throw new Error(`Preview stream failed: ${res.status}`);
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("No response body");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: PreviewResult | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() ?? "";
+
+    for (const chunk of chunks) {
+      if (chunk.startsWith("data: ")) {
+        const data = JSON.parse(chunk.slice(6));
+        if (data.stage === "complete") {
+          const bytes = Uint8Array.from(atob(data.image), c => c.charCodeAt(0));
+          const blob = new Blob([bytes], { type: "image/png" });
+          const compositeUrl = URL.createObjectURL(blob);
+          const manifest: Manifest = {
+            width: data.manifest.width,
+            height: data.manifest.height,
+            plates: (data.manifest.plates || []).map((p: Record<string, unknown>) => ({
+              name: p.name,
+              color: p.color,
+              coverage: (p.coverage_pct ?? p.coverage ?? 0) as number,
+            })),
+            ai_analysis: (data.manifest.ai_analysis as Manifest["ai_analysis"]) ?? null,
+            upscaled: (data.manifest.upscaled as boolean) ?? false,
+            merge_suggestions: data.manifest.merge_suggestions as Manifest["merge_suggestions"],
+          };
+          result = { compositeUrl, manifest };
+        } else {
+          onProgress(data.stage as string, data.pct as number);
+        }
+      }
+    }
+  }
+
+  if (!result) throw new Error("No result received from stream");
+  return result;
+}

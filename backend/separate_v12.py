@@ -192,7 +192,8 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
              sigma_s=100, sigma_r=0.5,
              meanshift_sp=15, meanshift_sr=30,
              upscale=True, img_hash=None,
-             color_space="cielab"):
+             color_space="cielab",
+             progress_callback=None):
     """
     V12 separation: EdgePreserve → MeanShift → CIELAB/OKLab K-means++ → CC Cleanup → Smooth → Merge suggestions.
 
@@ -211,7 +212,12 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
         upscale: whether to apply Real-ESRGAN 2x upscale
         img_hash: if provided, check upscale cache instead of re-upscaling
         color_space: "cielab" (default) or "oklab"
+        progress_callback: optional callable(stage, pct) for progress reporting
     """
+    def report(stage, pct):
+        if progress_callback:
+            progress_callback(stage, pct)
+
     # Load image
     if isinstance(input_path_or_array, str):
         img = Image.open(input_path_or_array).convert("RGB")
@@ -220,6 +226,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
         arr = input_path_or_array
         img = Image.fromarray(arr)
 
+    report("Upscaling image", 5)
     # ── Step 0: Optional Real-ESRGAN 2x upscale (with cache support) ──
     was_upscaled = False
     if upscale:
@@ -239,6 +246,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
+    report("Separating colors", 10)
     # ── Step 1: Edge-preserving filter ──
     filtered = cv2.edgePreservingFilter(arr, flags=1, sigma_s=sigma_s, sigma_r=sigma_r)
 
@@ -266,6 +274,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
     else:
         sample = lab_flat
 
+    report("Clustering", 40)
     # ── Step 4: MiniBatchKMeans clustering ──
     init = "k-means++"
     if locked_colors and len(locked_colors) > 0:
@@ -333,6 +342,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
     dists = cdist(lab_flat, palette_lab_boosted, metric='sqeuclidean')
     pixel_labels = np.argmin(dists, axis=1).reshape(h, w)
 
+    report("Cleaning up", 70)
     # ── Step 6: Connected component cleanup ──
     pixel_labels = connected_component_cleanup(pixel_labels, n_plates, dust_threshold)
 
@@ -380,6 +390,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
         results.append(plate_info)
         plate_images[name] = {"mask": mask, "binary": binary, "image": plate_img}
 
+    report("Building output", 90)
     # ── Step 8: Composite preview ──
     comp = np.ones((h, w, 3), dtype=np.uint8) * 255
     for plate_info in reversed(results):
@@ -487,7 +498,8 @@ def build_preview_response(image_bytes, plates=4, dust=50,
                            sigma_s=100, sigma_r=0.5,
                            meanshift_sp=15, meanshift_sr=30,
                            upscale=True, img_hash=None,
-                           color_space="cielab", **kwargs):
+                           color_space="cielab",
+                           progress_callback=None, **kwargs):
     """Process image and return composite PNG bytes + manifest."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
@@ -506,6 +518,7 @@ def build_preview_response(image_bytes, plates=4, dust=50,
         meanshift_sp=meanshift_sp, meanshift_sr=meanshift_sr,
         upscale=upscale, img_hash=img_hash,
         color_space=color_space,
+        progress_callback=progress_callback,
     )
 
     buf = io.BytesIO()
@@ -619,7 +632,8 @@ def build_zip_response(image_bytes, plates=4, dust=50,
                        sigma_s=100, sigma_r=0.5,
                        meanshift_sp=15, meanshift_sr=30,
                        upscale=True, img_hash=None,
-                       color_space="cielab", **kwargs):
+                       color_space="cielab",
+                       progress_callback=None, **kwargs):
     """Process image and return ZIP bytes containing all outputs."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
@@ -638,6 +652,7 @@ def build_zip_response(image_bytes, plates=4, dust=50,
         meanshift_sp=meanshift_sp, meanshift_sr=meanshift_sr,
         upscale=upscale, img_hash=img_hash,
         color_space=color_space,
+        progress_callback=progress_callback,
     )
 
     zip_buf = io.BytesIO()

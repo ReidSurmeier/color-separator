@@ -246,6 +246,103 @@ async def preview(
     )
 
 
+@app.post("/api/preview-stream")
+async def preview_stream(
+    image: UploadFile = File(...),
+    plates: int = Form(3),
+    dust: int = Form(20),
+    use_edges: bool = Form(True),
+    edge_sigma: float = Form(1.5),
+    locked_colors: str | None = Form(None),
+    version: str = Form("v20"),
+    upscale: bool = Form(True),
+    median_size: int = Form(5),
+    chroma_boost: float = Form(1.3),
+    shadow_threshold: int = Form(8),
+    highlight_threshold: int = Form(95),
+    sigma_s: float = Form(100),
+    sigma_r: float = Form(0.5),
+    meanshift_sp: int = Form(15),
+    meanshift_sr: int = Form(30),
+    detail_strength: float = Form(0.5),
+):
+    """Stream progress events via SSE, then send final result."""
+    image_bytes = await image.read()
+    err = await validate_upload(image_bytes)
+    if err is not None:
+        return err
+    locked = parse_locked_colors(locked_colors)
+    mod = get_module(version)
+
+    kwargs: dict = dict(
+        image_bytes=image_bytes, plates=plates, dust=dust,
+        use_edges=use_edges, edge_sigma=edge_sigma, locked_colors=locked,
+    )
+    if version in ("v15", "v16", "v17", "v18", "v19", "v20"):
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+        kwargs["median_size"] = median_size
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+    elif version == "v14":
+        kwargs["sigma_s"] = sigma_s
+        kwargs["sigma_r"] = sigma_r
+        kwargs["meanshift_sp"] = meanshift_sp
+        kwargs["meanshift_sr"] = meanshift_sr
+        kwargs["shadow_threshold"] = shadow_threshold
+        kwargs["highlight_threshold"] = highlight_threshold
+        kwargs["median_size"] = median_size
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+        kwargs["detail_strength"] = detail_strength
+    elif version in ("v10", "v11", "v12"):
+        kwargs["sigma_s"] = sigma_s
+        kwargs["sigma_r"] = sigma_r
+        kwargs["meanshift_sp"] = meanshift_sp
+        kwargs["meanshift_sr"] = meanshift_sr
+        kwargs["chroma_boost"] = chroma_boost
+        kwargs["upscale"] = upscale
+
+    progress_events: list[dict] = []
+
+    def on_progress(stage: str, pct: int):
+        progress_events.append({"stage": stage, "pct": pct})
+
+    kwargs["progress_callback"] = on_progress
+
+    async def generate():
+        import concurrent.futures
+        loop = asyncio.get_event_loop()
+
+        async with _heavy_semaphore:
+            future = loop.run_in_executor(
+                None, lambda: mod.build_preview_response(**kwargs)
+            )
+
+            sent = 0
+            while not future.done():
+                await asyncio.sleep(0.3)
+                while sent < len(progress_events):
+                    evt = progress_events[sent]
+                    yield f"data: {json.dumps(evt)}\n\n"
+                    sent += 1
+
+            # Drain remaining
+            while sent < len(progress_events):
+                evt = progress_events[sent]
+                yield f"data: {json.dumps(evt)}\n\n"
+                sent += 1
+
+            composite_bytes, manifest = future.result()
+
+        gc.collect()
+
+        img_b64 = base64.b64encode(composite_bytes).decode()
+        yield f"data: {json.dumps({'stage': 'complete', 'pct': 100, 'manifest': manifest, 'image': img_b64})}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
 @app.post("/api/separate")
 async def separate_endpoint(
     image: UploadFile = File(...),
