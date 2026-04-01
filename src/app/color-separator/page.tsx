@@ -279,7 +279,13 @@ export default function ColorSeparator() {
       } catch (err) {
         console.error("Preview failed:", err);
       } finally {
-        stopProgress();
+        if (!isSamVersion) {
+          stopProgress();
+        } else {
+          // SSE already set progress to 100 via 'complete' event
+          setProgressPct(100);
+          setTimeout(() => setProgressStage(null), 500);
+        }
         setIsLoading(false);
       }
     },
@@ -1050,7 +1056,7 @@ export default function ColorSeparator() {
                 ))}
               </div>
             )}
-            <div className="plates-grid">
+            {!isLoadingPlates && <div className="plates-grid">
               {plateImages.map((plate, i) => (
                 <div
                   className={`plate-card ${mergeMode && selectedForMerge.includes(i) ? 'plate-selected' : ''}`}
@@ -1078,7 +1084,7 @@ export default function ColorSeparator() {
                   </div>
                 </div>
               ))}
-            </div>
+            </div>}
           </div>
         )}
 
