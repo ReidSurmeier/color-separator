@@ -20,21 +20,33 @@ import separate_v2 as v2
 import separate_v4 as v4
 import separate_v5 as v5
 import separate_v6 as v6
-import separate_v7 as v7
-import separate_v8 as v8
+try:
+    import separate_v7 as v7
+except ImportError:
+    v7 = None  # pydensecrf not available in CI
+try:
+    import separate_v8 as v8
+except ImportError:
+    v8 = None
 import separate_v9 as v9
 import separate_v10 as v10
 import separate_v11 as v11
 import separate_v12 as v12
 import separate_v13 as v13
 import separate_v14 as v14
-import separate_v15 as v15
-import separate_v16 as v16
-import separate_v17 as v17
-import separate_v18 as v18
-import separate_v19 as v19
-import separate_v20 as v20
-import auto_optimize
+try:
+    import separate_v15 as v15
+    import separate_v16 as v16
+    import separate_v17 as v17
+    import separate_v18 as v18
+    import separate_v19 as v19
+    import separate_v20 as v20
+except ImportError:
+    v15 = v16 = v17 = v18 = v19 = v20 = None
+try:
+    import auto_optimize
+except ImportError:
+    auto_optimize = None
 
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50MB
@@ -74,10 +86,12 @@ def parse_locked_colors(raw: str | None) -> list[list[int]] | None:
 
 
 VERSION_MAP = {
-    "v2": v2, "v3": v3, "v4": v4, "v5": v5, "v6": v6,
-    "v7": v7, "v8": v8, "v9": v9, "v10": v10, "v11": v11,
-    "v12": v12, "v13": v13, "v14": v14, "v15": v15, "v16": v16,
-    "v17": v17, "v18": v18, "v19": v19, "v20": v20,
+    k: mod for k, mod in {
+        "v2": v2, "v3": v3, "v4": v4, "v5": v5, "v6": v6,
+        "v7": v7, "v8": v8, "v9": v9, "v10": v10, "v11": v11,
+        "v12": v12, "v13": v13, "v14": v14, "v15": v15, "v16": v16,
+        "v17": v17, "v18": v18, "v19": v19, "v20": v20,
+    }.items() if mod is not None
 }
 
 def get_module(version: str):
@@ -360,13 +374,7 @@ async def merge_endpoint(
     locked = parse_locked_colors(locked_colors)
     pairs = json.loads(merge_pairs)
 
-    _merge_versions = {
-        "v3": v3, "v2": v2, "v4": v4, "v5": v5, "v6": v6, "v7": v7,
-        "v8": v8, "v9": v9, "v10": v10, "v11": v11, "v12": v12, "v13": v13,
-        "v14": v14, "v15": v15, "v16": v16, "v17": v17, "v18": v18,
-        "v19": v19, "v20": v20,
-    }
-    merge_mod = _merge_versions.get(version, v11)
+    merge_mod = VERSION_MAP.get(version, v11)
     composite_bytes, manifest = merge_mod.build_merge_response(
         image_bytes=image_bytes,
         merge_pairs=pairs,
