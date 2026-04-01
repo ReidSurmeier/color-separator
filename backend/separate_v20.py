@@ -225,6 +225,12 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
 
     # ── Step 0: Optional Real-ESRGAN 2x upscale ──
     report("Upscaling image (2×)", 5)
+    # Limit input size to prevent OOM (SAM + ESRGAN + upscaled arrays)
+    max_dim = max(arr.shape[:2])
+    if max_dim > 1200 and upscale:
+        sf = 1200 / max_dim
+        arr = cv2.resize(arr, (int(arr.shape[1]*sf), int(arr.shape[0]*sf)), interpolation=cv2.INTER_AREA)
+        img = Image.fromarray(arr)
     was_upscaled = False
     if upscale:
         if img_hash and img_hash in _upscale_cache:
@@ -238,6 +244,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
                 img = Image.fromarray(arr)
                 was_upscaled = True
 
+        release_upscaler()  # Free ESRGAN model before SAM loads
     h, w = arr.shape[:2]
 
     if output_dir:
