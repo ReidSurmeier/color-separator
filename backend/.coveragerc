@@ -1,0 +1,17 @@
+[run]
+source = .
+omit =
+    tests/*
+    separate_v2_backup.py
+    overnight_optimize.py
+    separate_v15.py
+    separate_v16.py
+    separate_v17.py
+    separate_v18.py
+    separate_v19.py
+    separate_v20.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__
