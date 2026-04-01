@@ -149,7 +149,7 @@ def check_memory_for_sam():
     except ImportError:
         pass
 
-    required_gb = 3.0 if sam_cached else 8.0
+    required_gb = 4.0 if sam_cached else 11.0
 
     if available_gb < required_gb:
         return False, f"Insufficient memory: {available_gb:.1f}GB available, need {required_gb:.1f}GB. System has 16GB total."
