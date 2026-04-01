@@ -338,6 +338,7 @@ class TestErrorPaths:
         )
         assert resp.status_code == 413
 
+    @pytest.mark.skipif(IN_CI, reason="Fallback to v20 requires torch, not available in CI")
     def test_invalid_version_falls_back(self, client, sample_png):
         """An unknown version string should still work (falls back to default)."""
         sample_png.seek(0)
