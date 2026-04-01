@@ -59,10 +59,16 @@ jobs:
       - run: pip install pip-audit
       - name: pip audit
         run: pip-audit -r backend/requirements.txt || true
-      - name: FOSSA Scan
+      - name: FOSSA Analyze
         uses: fossas/fossa-action@main
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
+      - name: FOSSA License Check
+        run: |
+          curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash
+          fossa test --timeout 300
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         continue-on-error: true
       - name: Trivy FS Scan
         uses: aquasecurity/trivy-action@master

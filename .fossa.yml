@@ -1,18 +1,14 @@
-version: 1
+version: 3
+
 project:
+  id: color-separator
   name: color-separator
-analyze:
-  modules:
-    - name: frontend
-      type: npm
-      target: .
-      path: .
-    - name: backend
-      type: pip
-      target: backend/requirements.txt
-      path: backend
-exclude:
-  - backend/venv
-  - backend/weights
-  - backend/sam2.1_t.pt
-  - backend/__pycache__
+
+paths:
+  exclude:
+    - backend/venv/
+    - backend/weights/
+    - backend/sam2.1_t.pt
+    - backend/__pycache__/
+    - node_modules/
+    - .next/
