@@ -62,6 +62,7 @@ cd backend
 echo "▸ Installing dependencies..."
 pip install -q --upgrade pip
 pip install -q -r requirements.txt
+pip install -q slowapi
 
 # Additional GPU deps (may already be in the PyTorch template)
 pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cu124 2>/dev/null || true
@@ -115,4 +116,15 @@ echo "════════════════════════�
 echo ""
 
 export GPU_MODE=1
+
+# Auth — set these env vars before running, or pass as arguments
+if [ -z "$BACKEND_API_KEY" ]; then
+    echo "⚠ WARNING: BACKEND_API_KEY not set — backend has NO auth!"
+    echo "  Set it: export BACKEND_API_KEY=your_secret_key"
+fi
+if [ -z "$GPU_AUTH_PASSWORD" ]; then
+    echo "⚠ WARNING: GPU_AUTH_PASSWORD not set — frontend has no password gate."
+    echo "  Set it: export GPU_AUTH_PASSWORD=your_password"
+fi
+
 exec uvicorn main:app --host 0.0.0.0 --port 8001 --workers 4

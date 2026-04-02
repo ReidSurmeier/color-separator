@@ -65,7 +65,7 @@ except ImportError:
 
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50MB
-Image.MAX_IMAGE_PIXELS = 50_000_000  # Prevent decompression bombs
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS  # From gpu_config
 
 
 async def validate_upload(image_bytes: bytes):
@@ -87,6 +87,68 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── API Key authentication middleware ──
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    """Require X-API-Key header when BACKEND_API_KEY is configured."""
+    async def dispatch(self, request: Request, call_next):
+        if not BACKEND_API_KEY:
+            return await call_next(request)  # No key set = no auth (local dev)
+        if request.url.path == "/api/health":
+            return await call_next(request)  # Health check always open
+        key = request.headers.get("X-API-Key", "")
+        if key != BACKEND_API_KEY:
+            return JSONResponse(status_code=401, content={"error": "Invalid or missing API key."})
+        return await call_next(request)
+
+app.add_middleware(APIKeyMiddleware)
+
+# ── Rate limiting ──
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    limiter = Limiter(key_func=get_remote_address, default_limits=[f"{RATE_LIMIT_PER_MINUTE}/minute"])
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+except ImportError:
+    # slowapi not installed — skip rate limiting (log warning)
+    import logging
+    logging.getLogger(__name__).warning("slowapi not installed — rate limiting disabled")
+
+# ── GPU auth password verification endpoint ──
+from fastapi import Header
+from pydantic import BaseModel
+
+class AuthRequest(BaseModel):
+    password: str
+
+@app.post("/api/auth/verify")
+async def verify_gpu_password(body: AuthRequest):
+    """Verify password to unlock GPU features on the frontend."""
+    if not GPU_AUTH_PASSWORD:
+        return {"authorized": True}  # No password set = always authorized
+    if body.password == GPU_AUTH_PASSWORD:
+        # Return a session token (HMAC of password + timestamp, valid 24h)
+        import hashlib, time as t
+        token_data = f"{GPU_AUTH_PASSWORD}:{int(t.time()) // 86400}"
+        token = hashlib.sha256(token_data.encode()).hexdigest()[:32]
+        return {"authorized": True, "token": token}
+    return JSONResponse(status_code=403, content={"authorized": False, "error": "Invalid password."})
+
+@app.post("/api/auth/check")
+async def check_gpu_token(body: dict):
+    """Check if a GPU auth token is still valid."""
+    if not GPU_AUTH_PASSWORD:
+        return {"valid": True}
+    import hashlib, time as t
+    token = body.get("token", "")
+    token_data = f"{GPU_AUTH_PASSWORD}:{int(t.time()) // 86400}"
+    expected = hashlib.sha256(token_data.encode()).hexdigest()[:32]
+    return {"valid": token == expected}
 
 
 def parse_locked_colors(raw: str | None) -> list[list[int]] | None:
@@ -281,8 +343,8 @@ async def preview(
         kwargs["median_size"] = median_size
         kwargs["chroma_boost"] = chroma_boost
         kwargs["upscale"] = upscale
-    if version == "v20":
-        kwargs["upscale"] = False  # OOM risk on 16GB systems
+    if version == "v20" and not UPSCALE_ENABLED:
+        kwargs["upscale"] = False  # Disabled in gpu_config
 
     if version in SAM_VERSIONS:
         ok, msg = check_memory_for_sam()
@@ -357,8 +419,8 @@ async def preview_stream(
         kwargs["meanshift_sr"] = meanshift_sr
         kwargs["chroma_boost"] = chroma_boost
         kwargs["upscale"] = upscale
-    if version == "v20":
-        kwargs["upscale"] = False  # OOM risk on 16GB systems
+    if version == "v20" and not UPSCALE_ENABLED:
+        kwargs["upscale"] = False  # Disabled in gpu_config
 
     if version in SAM_VERSIONS:
         ok, msg = check_memory_for_sam()
@@ -506,8 +568,8 @@ async def separate_endpoint(
         kwargs["median_size"] = median_size
         kwargs["chroma_boost"] = chroma_boost
         kwargs["upscale"] = upscale
-    if version == "v20":
-        kwargs["upscale"] = False  # OOM risk on 16GB systems
+    if version == "v20" and not UPSCALE_ENABLED:
+        kwargs["upscale"] = False  # Disabled in gpu_config
 
     if version in SAM_VERSIONS:
         ok, msg = check_memory_for_sam()
@@ -566,8 +628,8 @@ async def merge_endpoint(
 
     merge_mod = VERSION_MAP.get(version, v11)
 
-    if version == "v20":
-        upscale = False  # OOM risk on 16GB systems
+    if version == "v20" and not UPSCALE_ENABLED:
+        upscale = False  # Disabled in gpu_config
 
     if version in SAM_VERSIONS:
         ok, msg = check_memory_for_sam()

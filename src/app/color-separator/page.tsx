@@ -6,6 +6,7 @@ import { fetchPreview, fetchPreviewStream, fetchSeparation, fetchUpscale, fetchM
 import { rgbToHex, hexToRgb } from "@/lib/colors";
 import type { SeparationParams, Manifest, PreviewResult } from "@/lib/types";
 import JSZip from "jszip";
+import GpuAuthGate from "@/components/GpuAuthGate";
 
 type VersionId = SeparationParams["version"];
 
@@ -553,6 +554,7 @@ export default function ColorSeparator() {
   const displayImage = showOriginal && canCompare ? sourceUrl : (compositeUrl ?? sourceUrl);
 
   return (
+    <GpuAuthGate>
     <>
       {/* Back to tools bar */}
       <Link href="/" className="back-to-tools">← tools.reidsurmeier.wtf</Link>
@@ -1115,6 +1117,7 @@ export default function ColorSeparator() {
         <div className="upscale-status">upscaling...</div>
       )}
     </>
+    </GpuAuthGate>
   );
 }
 

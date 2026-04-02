@@ -3,10 +3,20 @@ GPU configuration for cloud deployment (RunPod 5090 / any CUDA GPU).
 Import this at the top of main.py to override CPU-bound defaults.
 
 Usage: set env var GPU_MODE=1 to activate.
+Auth:  set BACKEND_API_KEY env var to require X-API-Key header.
+       set GPU_AUTH_PASSWORD for the frontend password gate.
 """
 import os
 
 GPU_MODE = os.environ.get("GPU_MODE", "0") == "1"
+
+# ── Authentication ──
+# When set, all /api/* requests must include X-API-Key header
+BACKEND_API_KEY = os.environ.get("BACKEND_API_KEY", "")
+# Password users must enter in the frontend to unlock GPU processing
+GPU_AUTH_PASSWORD = os.environ.get("GPU_AUTH_PASSWORD", "")
+# Rate limiting (requests per minute per IP)
+RATE_LIMIT_PER_MINUTE = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "10" if GPU_MODE else "30"))
 
 if GPU_MODE:
     # ── Tuning for RTX 5090 (32GB VRAM, ~128GB system RAM on RunPod) ──
@@ -34,6 +44,9 @@ if GPU_MODE:
     # Enable upscaling for v20 (safe on 32GB VRAM)
     UPSCALE_ENABLED = True
     
+    # PIL pixel limit — match 8K (8192² = 67M pixels)
+    MAX_IMAGE_PIXELS = 70_000_000
+    
     # Uvicorn workers
     WORKERS = 4
 
@@ -50,4 +63,5 @@ else:
     UPSCALE_PRE_MAX_DIM = 1200
     UPSCALE_CACHE_MAX_DIM = 1000
     UPSCALE_ENABLED = False  # v20 upscale off on 16GB
+    MAX_IMAGE_PIXELS = 50_000_000
     WORKERS = 2
