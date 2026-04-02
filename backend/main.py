@@ -173,8 +173,16 @@ VERSION_MAP = {
 }
 
 
+
+def _clamp(val: int, lo: int, hi: int) -> int:
+    return max(lo, min(val, hi))
+
+VALID_VERSIONS = set(VERSION_MAP.keys())
+
 def get_module(version: str):
-    return VERSION_MAP.get(version, v20)  # default to v20 (best)
+    if version not in VALID_VERSIONS:
+        return None  # caller must handle
+    return VERSION_MAP.get(version)
 
     if version == "v10":
         return v10
@@ -230,14 +238,10 @@ async def health():
         sam_cached = _sam_model is not None
     except ImportError:
         pass
+    # Only expose detailed memory to authenticated requests
+    from starlette.requests import Request
     return {
         "status": "ok",
-        "memory": {
-            "total_gb": round(mem.total / 1024**3, 1),
-            "available_gb": round(mem.available / 1024**3, 1),
-            "used_pct": mem.percent,
-            "swap_free_gb": round(swap.free / 1024**3, 1),
-        },
         "sam_cached": sam_cached,
     }
 
@@ -272,7 +276,11 @@ async def preview(
     if err is not None:
         return err
     locked = parse_locked_colors(locked_colors)
+    plates = _clamp(plates, 2, 60)
+    dust = _clamp(dust, 0, 100)
     mod = get_module(version)
+    if mod is None:
+        return JSONResponse(status_code=400, content={"error": f"Unknown version: {version}. Valid: {sorted(VALID_VERSIONS)}"})
 
     kwargs: dict = dict(
         image_bytes=image_bytes, plates=plates, dust=dust,
@@ -389,7 +397,11 @@ async def preview_stream(
     if err is not None:
         return err
     locked = parse_locked_colors(locked_colors)
+    plates = _clamp(plates, 2, 60)
+    dust = _clamp(dust, 0, 100)
     mod = get_module(version)
+    if mod is None:
+        return JSONResponse(status_code=400, content={"error": f"Unknown version: {version}. Valid: {sorted(VALID_VERSIONS)}"})
 
     kwargs: dict = dict(
         image_bytes=image_bytes, plates=plates, dust=dust,
@@ -497,7 +509,11 @@ async def separate_endpoint(
     if err is not None:
         return err
     locked = parse_locked_colors(locked_colors)
+    plates = _clamp(plates, 2, 60)
+    dust = _clamp(dust, 0, 100)
     mod = get_module(version)
+    if mod is None:
+        return JSONResponse(status_code=400, content={"error": f"Unknown version: {version}. Valid: {sorted(VALID_VERSIONS)}"})
 
     kwargs: dict = dict(
         image_bytes=image_bytes, plates=plates, dust=dust,
@@ -626,7 +642,9 @@ async def merge_endpoint(
     locked = parse_locked_colors(locked_colors)
     pairs = json.loads(merge_pairs)
 
-    merge_mod = VERSION_MAP.get(version, v11)
+    merge_mod = VERSION_MAP.get(version)
+    if merge_mod is None:
+        return JSONResponse(status_code=400, content={"error": f"Unknown version: {version}"})
 
     if version == "v20" and not UPSCALE_ENABLED:
         upscale = False  # Disabled in gpu_config

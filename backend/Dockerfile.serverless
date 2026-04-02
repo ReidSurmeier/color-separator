@@ -21,12 +21,18 @@ RUN mkdir -p /app/weights && \
     wget -q https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth \
     -O /app/weights/RealESRGAN_x2plus.pth
 
+# Create non-root user
+RUN useradd -m -u 1000 appuser
+
 # Copy backend code
-COPY . .
+COPY --chown=appuser:appuser . .
 
 # GPU mode + auth via env vars at runtime
 ENV GPU_MODE=1
 ENV PYTHONUNBUFFERED=1
+
+# Run as non-root
+USER appuser
 
 EXPOSE 8001
 
