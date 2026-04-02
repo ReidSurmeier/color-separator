@@ -2,6 +2,23 @@ import type { Manifest, PreviewResult, SeparationParams, OptimizeIteration } fro
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
+// SAM versions (v15+) route through GPU serverless proxy when available
+const SAM_VERSIONS = ["v15", "v16", "v17", "v18", "v19", "v20"];
+
+function getEndpoint(action: string, version: string): string {
+  if (SAM_VERSIONS.includes(version)) {
+    // Route to GPU proxy (RunPod serverless)
+    return `/api/gpu-proxy`;
+  }
+  return `${BACKEND_URL}/api/${action}`;
+}
+
+function buildGpuFormData(file: File, params: SeparationParams, action: string): FormData {
+  const fd = buildFormData(file, params);
+  fd.append("action", action);
+  return fd;
+}
+
 function buildFormData(file: File, params: SeparationParams): FormData {
   const fd = new FormData();
   fd.append("image", file);
@@ -67,8 +84,10 @@ export async function fetchPreview(
   file: File,
   params: SeparationParams,
 ): Promise<PreviewResult> {
-  const fd = buildFormData(file, params);
-  const res = await fetch(`${BACKEND_URL}/api/preview`, {
+  const isGpu = SAM_VERSIONS.includes(params.version);
+  const fd = isGpu ? buildGpuFormData(file, params, "preview") : buildFormData(file, params);
+  const url = isGpu ? `/api/gpu-proxy` : `${BACKEND_URL}/api/preview`;
+  const res = await fetch(url, {
     method: "POST",
     body: fd,
   });
@@ -76,6 +95,9 @@ export async function fetchPreview(
   if (res.status === 503) {
     const err = await res.json();
     throw new Error(err.error || "Server overloaded — not enough memory for SAM processing");
+  }
+  if (res.status === 504) {
+    throw new Error("GPU worker is starting up (~30s cold start). Please try again in a moment.");
   }
   if (!res.ok) {
     throw new Error(`Preview failed: ${res.status}`);
@@ -107,8 +129,10 @@ export async function fetchSeparation(
   file: File,
   params: SeparationParams,
 ): Promise<Blob> {
-  const fd = buildFormData(file, params);
-  const res = await fetch(`${BACKEND_URL}/api/separate`, {
+  const isGpu = SAM_VERSIONS.includes(params.version);
+  const fd = isGpu ? buildGpuFormData(file, params, "separate") : buildFormData(file, params);
+  const url = isGpu ? `/api/gpu-proxy` : `${BACKEND_URL}/api/separate`;
+  const res = await fetch(url, {
     method: "POST",
     body: fd,
   });
@@ -116,6 +140,9 @@ export async function fetchSeparation(
   if (res.status === 503) {
     const err = await res.json();
     throw new Error(err.error || "Server overloaded — not enough memory for SAM processing");
+  }
+  if (res.status === 504) {
+    throw new Error("GPU worker is starting up (~30s cold start). Please try again in a moment.");
   }
   if (!res.ok) {
     throw new Error(`Separation failed: ${res.status}`);
