@@ -100,7 +100,8 @@ def upscale_and_cache(image_bytes: bytes) -> tuple[str, bool, bool]:
         return img_hash, True, True
     arr = np.array(Image.open(io.BytesIO(image_bytes)).convert('RGB'))
     h, w = arr.shape[:2]
-    max_dim = 1000
+    from gpu_config import UPSCALE_CACHE_MAX_DIM
+    max_dim = UPSCALE_CACHE_MAX_DIM
     if max(h, w) > max_dim:
         ratio = max_dim / max(h, w)
         new_w, new_h = int(w * ratio), int(h * ratio)
@@ -119,13 +120,15 @@ def get_sam_model():
     global _sam_model
     if _sam_model is None:
         import torch, gc
+        from gpu_config import SAM_MODEL, SAM_FORCE_CPU
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             gc.collect()
         from ultralytics import SAM
-        _sam_model = SAM("sam2.1_t.pt")
-        # Force SAM to CPU — GPU is reserved for ESRGAN upscaler
-        _sam_model.model.cpu()
+        _sam_model = SAM(SAM_MODEL)
+        if SAM_FORCE_CPU:
+            _sam_model.model.cpu()
+        # else: SAM stays on CUDA (auto-detected)
     return _sam_model
 
 
@@ -218,9 +221,10 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
     # ── Step 0: Optional Real-ESRGAN 2x upscale ──
     report("Upscaling image (2×)", 5)
     # Limit input size to prevent OOM (SAM + ESRGAN + upscaled arrays)
+    from gpu_config import UPSCALE_PRE_MAX_DIM
     max_dim = max(arr.shape[:2])
-    if max_dim > 1200 and upscale:
-        sf = 1200 / max_dim
+    if max_dim > UPSCALE_PRE_MAX_DIM and upscale:
+        sf = UPSCALE_PRE_MAX_DIM / max_dim
         arr = cv2.resize(arr, (int(arr.shape[1]*sf), int(arr.shape[0]*sf)), interpolation=cv2.INTER_AREA)
         img = Image.fromarray(arr)
     was_upscaled = False
@@ -778,9 +782,10 @@ def build_preview_response(image_bytes, plates=4, dust=50,
                            upscale=True, img_hash=None,
                            progress_callback=None, **kwargs):
     """Process image and return composite PNG bytes + manifest."""
+    from gpu_config import PREVIEW_MAX_DIM
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-    max_dim = 1000 if upscale else 1500
+    max_dim = PREVIEW_MAX_DIM
     if max(img.size) > max_dim:
         ratio = max_dim / max(img.size)
         new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
@@ -812,9 +817,10 @@ def build_merge_response(image_bytes, merge_pairs, plates=4, dust=50,
                          median_size=3,
                          upscale=True, img_hash=None, **kwargs):
     """Run separation, apply merges, return new composite + manifest."""
+    from gpu_config import MERGE_MAX_DIM
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-    max_dim = 1000 if upscale else 1500
+    max_dim = MERGE_MAX_DIM
     if max(img.size) > max_dim:
         ratio = max_dim / max(img.size)
         new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
@@ -908,9 +914,10 @@ def build_zip_response(image_bytes, plates=4, dust=50,
                        upscale=True, img_hash=None,
                        progress_callback=None, **kwargs):
     """Process image and return ZIP bytes containing all outputs."""
+    from gpu_config import SEPARATE_MAX_DIM
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-    max_dim = 4000
+    max_dim = SEPARATE_MAX_DIM
     if max(img.size) > max_dim:
         ratio = max_dim / max(img.size)
         new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))

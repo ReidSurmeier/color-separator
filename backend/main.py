@@ -22,8 +22,10 @@ try:
 except ImportError:
     pass
 
-# Concurrency limit: only 1 heavy (v15+) request at a time to prevent OOM
-_heavy_semaphore = asyncio.Semaphore(1)
+from gpu_config import *
+
+# Concurrency limit: controlled by gpu_config (1 on CPU, 4 on GPU)
+_heavy_semaphore = asyncio.Semaphore(HEAVY_SEMAPHORE_LIMIT)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse
 from starlette.responses import StreamingResponse
@@ -149,10 +151,10 @@ def check_memory_for_sam():
     except ImportError:
         pass
 
-    required_gb = 4.0 if sam_cached else 11.0
+    required_gb = MEMORY_REQUIRED_CACHED if sam_cached else MEMORY_REQUIRED_UNCACHED
 
     if available_gb < required_gb:
-        return False, f"Insufficient memory: {available_gb:.1f}GB available, need {required_gb:.1f}GB. System has 16GB total."
+        return False, f"Insufficient memory: {available_gb:.1f}GB available, need {required_gb:.1f}GB."
     return True, "OK"
 
 

@@ -1075,3 +1075,19 @@ select:hover {
 }
 .data-row span:first-child { color: #999; }
 .data-row span:last-child { font-family: monospace; }
+
+/* ── Gametest feed scroll animation ── */
+@keyframes feed-scroll-up {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+.feed-scroller {
+  animation: feed-scroll-up var(--scroll-speed, 80s) linear infinite;
+}
+.feed-scroller:hover {
+  animation-duration: calc(var(--scroll-speed, 80s) / 2);
+}
+
+/* Slop tier filters applied to feed columns */
+.slop-tier-3 .feed-col-wrapper { filter: contrast(1.25) saturate(1.4); }
+.slop-tier-4 .feed-col-wrapper { filter: contrast(1.5) saturate(1.9) brightness(1.05); }

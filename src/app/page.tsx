@@ -3,6 +3,15 @@ import Image from "next/image";
 
 const TOOLS = [
   {
+    number: 6,
+    name: "attention.test",
+    year: "2026",
+    description: "Cognitive performance assessment with eye tracking, reading comprehension, and statistical analysis.",
+    href: "/gametest",
+    external: false,
+    screenshot: "/screenshots/gametest.png",
+  },
+  {
     number: 5,
     name: "color.separator",
     year: "2026",

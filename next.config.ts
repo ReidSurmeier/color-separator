@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
 
+const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8001";
+
 const nextConfig: NextConfig = {
   output: "standalone",
   experimental: {
-    proxyTimeout: 120_000, // 2 minutes for backend proxy (v20 processing)
+    proxyTimeout: 300_000, // 5 minutes for GPU backend (8K processing)
   },
   async rewrites() {
     return {
@@ -12,7 +14,7 @@ const nextConfig: NextConfig = {
       afterFiles: [
         {
           source: "/api/:path*",
-          destination: "http://localhost:8001/api/:path*",
+          destination: `${backendUrl}/api/:path*`,
         },
       ],
     };
