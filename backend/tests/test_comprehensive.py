@@ -359,12 +359,12 @@ class TestGetModule:
         except ImportError:
             pytest.skip("optional dependency missing")
 
-    def test_unknown_version_fallback(self):
+    def test_unknown_version_returns_none(self):
         try:
             from main import get_module
             mod = get_module('v999')
-            # Should fall back to default (v11 or similar)
-            assert mod is not None
+            # Unknown versions return None (no fallback)
+            assert mod is None
         except ImportError:
             pytest.skip("optional dependency missing")
 

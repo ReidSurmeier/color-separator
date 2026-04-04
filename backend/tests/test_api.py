@@ -192,10 +192,10 @@ class TestVersionMap:
         for v in ["v7", "v8", "v15", "v16", "v17", "v18", "v19", "v20"]:
             assert v in VERSION_MAP, f"Missing optional version {v}"
 
-    def test_unknown_version_defaults(self):
+    def test_unknown_version_returns_none(self):
         from main import get_module
         mod = get_module("v999")
-        assert mod is not None  # should default to v20
+        assert mod is None  # unknown versions return None, caller handles error
 
 
 # ── Locked Colors ──
