@@ -728,12 +728,17 @@ async def plates_endpoint(
     plates = min(max(int(plates), 2), 35)
     arr = np.array(img)
     mod = get_module(version)
-    kwargs = dict(
+    kwargs: dict = dict(
         n_plates=plates, dust_threshold=dust,
         locked_colors=locked, return_data=True,
-        chroma_boost=chroma_boost,
-        upscale=False,
     )
+    # Only pass params that the version's separate() accepts
+    _no_upscale_versions = ("v2", "v3", "v5", "v7")
+    _no_chroma_versions = ("v3",)
+    if version not in _no_upscale_versions:
+        kwargs["upscale"] = False  # plates endpoint always uses small thumbnails
+    if version not in _no_chroma_versions:
+        kwargs["chroma_boost"] = chroma_boost
     # Add version-specific params
     if version in ("v9", "v10", "v11", "v12", "v14"):
         kwargs.update(sigma_s=sigma_s, sigma_r=sigma_r, meanshift_sp=meanshift_sp, meanshift_sr=meanshift_sr)

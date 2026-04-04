@@ -244,37 +244,52 @@ export default function ColorSeparator() {
     }
   }, [cleanupPlateUrls]);
 
+  const applyPreviewResult = useCallback((result: PreviewResult, currentFile: File, params: SeparationParams) => {
+    if (compositeUrlRef.current) URL.revokeObjectURL(compositeUrlRef.current);
+    compositeUrlRef.current = result.compositeUrl;
+    setCompositeUrl(result.compositeUrl);
+    setManifest(result.manifest);
+
+    if (result.manifest.plates.length > 0) {
+      setColors((prev) => {
+        const locked = prev.filter((c) => c.locked);
+        const detected = result.manifest.plates.map((p) => ({
+          rgb: p.color,
+          locked: false,
+        }));
+        if (locked.length === 0) return detected;
+        return [...locked, ...detected.slice(locked.length)];
+      });
+    }
+
+    // Auto-fetch plate images
+    fetchPlateImagesFromApi(currentFile, params);
+  }, [fetchPlateImagesFromApi]);
+
   const runPreview = useCallback(
     async (currentFile: File, params: SeparationParams) => {
       setIsLoading(true);
       setPlateImages([]);
       setIsLoadingPlates(true);
       const isSamVersion = ["v15","v16","v17","v18","v19","v20"].includes(params.version);
-      startProgress(isSamVersion
-        ? true  // SAM versions: use slow progress (longer stages)
-        : (["v4","v9","v10","v11","v12","v13","v14"].includes(params.version)) && params.upscale !== false
-      );
       try {
-        const result: PreviewResult = await fetchPreview(currentFile, params);
-        if (compositeUrlRef.current) URL.revokeObjectURL(compositeUrlRef.current);
-        compositeUrlRef.current = result.compositeUrl;
-        setCompositeUrl(result.compositeUrl);
-        setManifest(result.manifest);
-
-        if (result.manifest.plates.length > 0) {
-          setColors((prev) => {
-            const locked = prev.filter((c) => c.locked);
-            const detected = result.manifest.plates.map((p) => ({
-              rgb: p.color,
-              locked: false,
-            }));
-            if (locked.length === 0) return detected;
-            return [...locked, ...detected.slice(locked.length)];
+        let result: PreviewResult;
+        if (isSamVersion) {
+          // SAM versions: use SSE streaming for real progress + Cloudflare compatibility
+          setProgressPct(0);
+          setProgressStage("Starting SAM segmentation");
+          result = await fetchPreviewStream(currentFile, params, (stage, pct) => {
+            setProgressStage(stage);
+            setProgressPct(pct);
           });
+        } else {
+          // Non-SAM versions: fast, use direct fetch with simulated progress
+          startProgress(
+            (["v4","v9","v10","v11","v12","v13","v14"].includes(params.version)) && params.upscale !== false
+          );
+          result = await fetchPreview(currentFile, params);
         }
-
-        // Auto-fetch plate images from separation ZIP
-        fetchPlateImagesFromApi(currentFile, params);
+        applyPreviewResult(result, currentFile, params);
       } catch (err) {
         console.error("Preview failed:", err);
         setProgressStage(err instanceof Error ? err.message : "Preview failed");
@@ -284,7 +299,7 @@ export default function ColorSeparator() {
         setIsLoading(false);
       }
     },
-    [startProgress, stopProgress, fetchPlateImagesFromApi],
+    [startProgress, stopProgress, applyPreviewResult],
   );
 
   const schedulePreview = useCallback(

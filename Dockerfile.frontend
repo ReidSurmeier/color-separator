@@ -9,8 +9,9 @@ RUN npm ci
 # Copy source
 COPY . .
 
-# Build standalone
+# Build standalone — BACKEND_URL needed at build time for next.config.ts rewrites
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV BACKEND_URL=http://backend:8001
 RUN npm run build
 
 # Production image

@@ -20,16 +20,16 @@ RATE_LIMIT_PER_MINUTE = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "10" if GPU_
 
 if GPU_MODE:
     # ── Tuning for RTX 5090 (32GB VRAM, ~128GB system RAM on RunPod) ──
-    
+
     # Allow 4 concurrent SAM requests (5090 has headroom)
     HEAVY_SEMAPHORE_LIMIT = 4
-    
+
     # Memory check thresholds — relaxed for cloud
     MEMORY_REQUIRED_CACHED = 1.0      # GB (was 4.0)
     MEMORY_REQUIRED_UNCACHED = 2.0    # GB (was 11.0)
-    
-    # SAM model — use large variant for best quality
-    SAM_MODEL = "sam2.1_l.pt"
+
+    # SAM model — env var SAM_WEIGHTS overrides default (for Docker pre-downloaded weights)
+    SAM_MODEL = os.environ.get("SAM_WEIGHTS", "sam2.1_l.pt")
     
     # Force GPU for SAM (don't call .cpu())
     SAM_FORCE_CPU = False
@@ -55,7 +55,7 @@ else:
     HEAVY_SEMAPHORE_LIMIT = 1
     MEMORY_REQUIRED_CACHED = 4.0
     MEMORY_REQUIRED_UNCACHED = 11.0
-    SAM_MODEL = "sam2.1_t.pt"
+    SAM_MODEL = os.environ.get("SAM_WEIGHTS", "sam2.1_t.pt")
     SAM_FORCE_CPU = True
     PREVIEW_MAX_DIM = 1500
     MERGE_MAX_DIM = 1500
