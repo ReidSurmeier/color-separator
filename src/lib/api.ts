@@ -2,12 +2,14 @@ import type { Manifest, PreviewResult, SeparationParams, OptimizeIteration } fro
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
-// SAM versions (v15+) route through GPU serverless proxy when available
+// SAM versions that need GPU — now served by local GPU backend (no RunPod proxy needed)
 const SAM_VERSIONS = ["v15", "v16", "v17", "v18", "v19", "v20"];
 
+// GPU proxy disabled — local backend has GPU now
+const USE_GPU_PROXY = false;
+
 function getEndpoint(action: string, version: string): string {
-  if (SAM_VERSIONS.includes(version)) {
-    // Route to GPU proxy (RunPod serverless)
+  if (USE_GPU_PROXY && SAM_VERSIONS.includes(version)) {
     return `/api/gpu-proxy`;
   }
   return `${BACKEND_URL}/api/${action}`;
@@ -84,7 +86,7 @@ export async function fetchPreview(
   file: File,
   params: SeparationParams,
 ): Promise<PreviewResult> {
-  const isGpu = SAM_VERSIONS.includes(params.version);
+  const isGpu = USE_GPU_PROXY && SAM_VERSIONS.includes(params.version);
   const fd = isGpu ? buildGpuFormData(file, params, "preview") : buildFormData(file, params);
   const url = isGpu ? `/api/gpu-proxy` : `${BACKEND_URL}/api/preview`;
   const res = await fetch(url, {
@@ -129,7 +131,7 @@ export async function fetchSeparation(
   file: File,
   params: SeparationParams,
 ): Promise<Blob> {
-  const isGpu = SAM_VERSIONS.includes(params.version);
+  const isGpu = USE_GPU_PROXY && SAM_VERSIONS.includes(params.version);
   const fd = isGpu ? buildGpuFormData(file, params, "separate") : buildFormData(file, params);
   const url = isGpu ? `/api/gpu-proxy` : `${BACKEND_URL}/api/separate`;
   const res = await fetch(url, {
