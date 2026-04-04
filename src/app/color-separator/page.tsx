@@ -135,8 +135,7 @@ export default function ColorSeparator() {
   const hasCrfSliders = version === "v7" || version === "v8";
   const hasSuperpixelSliders = version === "v6";
   const hasV4Sliders = version === "v4";
-  // v20 upscale disabled — causes OOM on 16GB machines (SAM + ESRGAN + arrays ~12GB peak)
-  const hasUpscaleToggle = version === "v4" || version === "v6" || version === "v9" || version === "v10" || version === "v11" || version === "v14" || version === "v15" || version === "v16" || version === "v17" || version === "v18" || version === "v19";
+  const hasUpscaleToggle = version === "v4" || version === "v6" || version === "v9" || version === "v10" || version === "v11" || version === "v14" || version === "v15" || version === "v16" || version === "v17" || version === "v18" || version === "v19" || version === "v20";
   const hasChromaSlider = version === "v4" || version === "v6" || version === "v7" || version === "v8" || version === "v9" || version === "v10" || version === "v11" || version === "v14" || version === "v15" || version === "v16" || version === "v17" || version === "v18" || version === "v19" || version === "v20";
   const hasV9Sliders = version === "v9" || version === "v10" || version === "v11" || version === "v14";
 
@@ -148,7 +147,7 @@ export default function ColorSeparator() {
       edgeSigma: overrides?.edgeSigma ?? edgeSigma,
       lockedColors: overrides?.lockedColors ?? colors.filter((c) => c.locked).map((c) => c.rgb),
       version: overrides?.version ?? version,
-      upscale: (overrides?.version ?? version) === "v20" ? false : (overrides?.upscale ?? upscale),
+      upscale: overrides?.upscale ?? upscale,
       medianSize: overrides?.medianSize ?? medianSize,
       chromaBoost: overrides?.chromaBoost ?? chromaBoost,
       shadowThreshold: overrides?.shadowThreshold ?? shadowThreshold,
@@ -342,8 +341,8 @@ export default function ColorSeparator() {
       cleanupPlateUrls();
       setCachedZipBlob(null);
 
-      // Fire upscale-on-upload if upscale is toggled on (skip for v20 — OOM risk)
-      if (upscale && version !== "v20") {
+      // Fire upscale-on-upload if upscale is toggled on
+      if (upscale) {
         setIsUpscaling(true);
         fetchUpscale(f)
           .then((result) => {
@@ -606,7 +605,7 @@ export default function ColorSeparator() {
               data-active={upscale ? "true" : "false"}
               onClick={() => setUpscale((u) => !u)}
             >
-              {upscale ? (version === "v6" ? "4x on" : "2x on") : "off"}
+              {upscale ? "on" : "off"}
             </button>
           </>
         )}
@@ -942,7 +941,7 @@ export default function ColorSeparator() {
             {manifest && (
               <>
                 <div className="data-row"><span>plates</span><span>{manifest.plates.length}</span></div>
-                {manifest.upscaled && <div className="data-row"><span>upscaled</span><span>2×</span></div>}
+                {manifest.upscaled && <div className="data-row"><span>upscaled</span><span>{manifest.upscale_scale ?? 2}×</span></div>}
                 {manifest.ai_analysis && (
                   <div className="data-row"><span>ai score</span><span>{manifest.ai_analysis.quality_score}/100</span></div>
                 )}

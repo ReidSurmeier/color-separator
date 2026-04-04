@@ -61,28 +61,45 @@ def _image_hash(image_bytes: bytes) -> str:
     return hashlib.md5(image_bytes[:4096]).hexdigest()
 
 
-def upscale_2x(arr: np.ndarray) -> tuple[np.ndarray, bool]:
-    """Run Real-ESRGAN 2x on an RGB numpy array. Returns (result, success)."""
+def upscale_2x(arr: np.ndarray, scale: int = None) -> tuple[np.ndarray, bool]:
+    """Run Real-ESRGAN on an RGB numpy array. Returns (result, success).
+    scale: 2 or 4. Defaults to gpu_config.UPSCALE_SCALE."""
     try:
+        if scale is None:
+            from gpu_config import UPSCALE_SCALE
+            scale = UPSCALE_SCALE
         import torch
         if torch.cuda.is_available():
             torch.cuda.empty_cache(); import gc; gc.collect()
         from basicsr.archs.rrdbnet_arch import RRDBNet
         from realesrgan import RealESRGANer
 
-        weights_path = os.path.join(os.path.dirname(__file__), "weights", "RealESRGAN_x2plus.pth")
-        if not os.path.exists(weights_path):
-            return arr, False
+        if scale == 4:
+            weights_name = "RealESRGAN_x4plus.pth"
+        else:
+            weights_name = "RealESRGAN_x2plus.pth"
+            scale = 2  # normalize
 
-        model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=2)
+        weights_path = os.path.join(os.path.dirname(__file__), "weights", weights_name)
+        if not os.path.exists(weights_path):
+            # Fallback to 2x if 4x weights missing
+            if scale == 4:
+                weights_path = os.path.join(os.path.dirname(__file__), "weights", "RealESRGAN_x2plus.pth")
+                scale = 2
+                if not os.path.exists(weights_path):
+                    return arr, False
+            else:
+                return arr, False
+
+        model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=scale)
         upsampler = RealESRGANer(
-            scale=2, model_path=weights_path, model=model,
+            scale=scale, model_path=weights_path, model=model,
             half=torch.cuda.is_available(),
             device="cuda" if torch.cuda.is_available() else "cpu",
             tile=256, tile_pad=10
         )
         bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
-        output, _ = upsampler.enhance(bgr, outscale=2)
+        output, _ = upsampler.enhance(bgr, outscale=scale)
         result = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
         del upsampler, model
         torch.cuda.empty_cache(); import gc; gc.collect()
@@ -218,8 +235,9 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
         arr = input_path_or_array
         img = Image.fromarray(arr)
 
-    # ── Step 0: Optional Real-ESRGAN 2x upscale ──
-    report("Upscaling image (2×)", 5)
+    # ── Step 0: Optional Real-ESRGAN upscale ──
+    from gpu_config import UPSCALE_SCALE
+    report(f"Upscaling image ({UPSCALE_SCALE}×)", 5)
     # Limit input size to prevent OOM (SAM + ESRGAN + upscaled arrays)
     from gpu_config import UPSCALE_PRE_MAX_DIM
     max_dim = max(arr.shape[:2])
@@ -706,6 +724,7 @@ def separate(input_path_or_array, output_dir=None, n_plates=4, dust_threshold=15
         "paper_pct": round(100.0 - sum(p["coverage_pct"] for p in results_list), 2),
         "version": "v20",
         "upscaled": was_upscaled,
+        "upscale_scale": UPSCALE_SCALE if was_upscaled else None,
         "merge_suggestions": merge_suggestions,
         "sam_masks": n_sam_masks,
     }

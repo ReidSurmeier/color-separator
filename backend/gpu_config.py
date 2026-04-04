@@ -43,7 +43,10 @@ if GPU_MODE:
     
     # Enable upscaling for v20 (safe on 32GB VRAM)
     UPSCALE_ENABLED = True
-    
+
+    # Upscale scale factor: 4 for GPU (RTX 4070 SUPER 12GB handles it fine)
+    UPSCALE_SCALE = int(os.environ.get("UPSCALE_SCALE", "4"))
+
     # PIL pixel limit — match 8K (8192² = 67M pixels)
     MAX_IMAGE_PIXELS = 70_000_000
     
@@ -63,5 +66,6 @@ else:
     UPSCALE_PRE_MAX_DIM = 1200
     UPSCALE_CACHE_MAX_DIM = 1000
     UPSCALE_ENABLED = False  # v20 upscale off on 16GB
+    UPSCALE_SCALE = int(os.environ.get("UPSCALE_SCALE", "2"))
     MAX_IMAGE_PIXELS = 50_000_000
     WORKERS = 2

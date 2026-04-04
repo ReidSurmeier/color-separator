@@ -25,6 +25,7 @@ export interface Manifest {
   plates: PlateInfo[];
   ai_analysis?: AiAnalysis | null;
   upscaled?: boolean;
+  upscale_scale?: number;
   merge_suggestions?: MergeSuggestion[];
 }
 

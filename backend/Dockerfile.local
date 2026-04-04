@@ -24,10 +24,12 @@ print('Created shim:', shim)"
 # Download SAM tiny weights (fits 12GB VRAM easily)
 RUN wget -q https://github.com/ultralytics/assets/releases/download/v8.3.0/sam2.1_t.pt -O /app/sam2.1_t.pt
 
-# Download RealESRGAN weights
+# Download RealESRGAN weights (2x and 4x)
 RUN mkdir -p /app/weights && \
     wget -q https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth \
-    -O /app/weights/RealESRGAN_x2plus.pth
+    -O /app/weights/RealESRGAN_x2plus.pth && \
+    wget -q https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth \
+    -O /app/weights/RealESRGAN_x4plus.pth
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser
