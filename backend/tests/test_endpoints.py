@@ -28,7 +28,9 @@ CI_VERSIONS = ["v2", "v3", "v4", "v5", "v6", "v9", "v10", "v11", "v12", "v13", "
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    api_key = os.environ.get("BACKEND_API_KEY", "")
+    headers = {"X-API-Key": api_key} if api_key else {}
+    return TestClient(app, headers=headers)
 
 
 @pytest.fixture
@@ -339,20 +341,16 @@ class TestErrorPaths:
         assert resp.status_code == 413
 
     @pytest.mark.skipif(IN_CI, reason="Fallback to v20 requires torch, not available in CI")
-    def test_invalid_version_falls_back(self, client, sample_png):
-        """An unknown version string should still work (falls back to default)."""
+    def test_invalid_version_rejected(self, client, sample_png):
+        """An unknown version string must return 400 (no silent fallback)."""
         sample_png.seek(0)
         resp = client.post(
             "/api/preview",
             files={"image": ("test.png", sample_png, "image/png")},
             data={"plates": "3", "version": "v999"},
         )
-        # Should either 200 (fallback) or skip if v20 not available
-        if IN_CI:
-            # In CI, v20 may not be available so fallback returns None module
-            assert resp.status_code in (200, 500)
-        else:
-            assert resp.status_code == 200
+        assert resp.status_code == 400
+        assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------

@@ -67,17 +67,74 @@ except ImportError:
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50MB
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS  # From gpu_config
 
+# Magic-byte signatures for allowed image formats
+_IMAGE_MAGIC: list[tuple[bytes, bytes | None]] = [
+    (b"\x89PNG",     None),          # PNG
+    (b"\xff\xd8\xff", None),         # JPEG
+    (b"GIF87a",      None),          # GIF87
+    (b"GIF89a",      None),          # GIF89
+    (b"RIFF",        b"WEBP"),       # WebP  (bytes 8-11 = "WEBP")
+    (b"II*\x00",     None),          # TIFF LE
+    (b"MM\x00*",     None),          # TIFF BE
+    (b"\x00\x00\x00", None),         # HEIF/HEIC (ftyp box, checked loosely)
+    (b"BM",          None),          # BMP
+]
+
+def _check_magic(data: bytes) -> bool:
+    """Return True if data starts with a recognised image magic sequence."""
+    for magic, extra in _IMAGE_MAGIC:
+        if data[:len(magic)] == magic:
+            if extra is None:
+                return True
+            # For WebP: bytes 8-11 must equal the extra tag
+            if data[8:12] == extra:
+                return True
+    # HEIF/HEIC: ftyp box at offset 4 (variable box size)
+    if len(data) >= 12 and data[4:8] == b"ftyp":
+        return True
+    return False
+
 
 async def validate_upload(image_bytes: bytes):
-    """Validate uploaded image. Returns error response or None if valid."""
+    """Validate uploaded image. Returns error response or None if valid.
+
+    Checks performed:
+    1. File-size limit (50 MB).
+    2. Magic-byte signature matches a known image format.
+    3. PIL can fully decode the image (catches truncated / corrupt files).
+    4. Image dimensions are within MAX_IMAGE_PIXELS (set on PIL globally).
+    EXIF data is stripped from the returned bytes via a re-save; callers
+    that need clean bytes should call strip_exif() themselves.
+    """
     if len(image_bytes) > MAX_UPLOAD_BYTES:
         return JSONResponse(status_code=413, content={"error": "File too large. Max 50MB."})
+
+    if not _check_magic(image_bytes):
+        return JSONResponse(status_code=400, content={"error": "Invalid image file."})
+
     try:
         img = Image.open(io.BytesIO(image_bytes))
-        img.load()  # Force decode without corrupting stream
+        img.load()  # Force full decode; catches truncated data
+        w, h = img.size
+        if w * h > MAX_IMAGE_PIXELS:
+            return JSONResponse(
+                status_code=413,
+                content={"error": f"Image too large ({w}x{h}). Max {MAX_IMAGE_PIXELS} pixels."},
+            )
     except Exception:
         return JSONResponse(status_code=400, content={"error": "Invalid image file."})
     return None
+
+
+def strip_exif(image_bytes: bytes) -> bytes:
+    """Return image bytes with EXIF/metadata stripped (re-saved as PNG)."""
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception:
+        return image_bytes  # Best-effort; original bytes if strip fails
 
 app = FastAPI(title="Woodblock Color Separation API")
 
@@ -88,10 +145,26 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-API-Key", "Accept"],
 )
 
-# ── API Key authentication middleware ──
+# ── Middleware base classes (must be imported before use) ──
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+# ── Security headers middleware ──
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add standard security headers to every response."""
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # HSTS: tell browsers to use HTTPS for 1 year (backend is API-only, proxied via Cloudflare)
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# ── API Key authentication middleware ──
 class APIKeyMiddleware(BaseHTTPMiddleware):
     """Require X-API-Key header when BACKEND_API_KEY is configured."""
     async def dispatch(self, request: Request, call_next):
@@ -172,6 +245,12 @@ VERSION_MAP = {
     }.items() if mod is not None
 }
 
+
+
+PLATES_MIN = 2
+PLATES_MAX = 35
+DUST_MIN = 5
+DUST_MAX = 100
 
 
 def _clamp(val: int, lo: int, hi: int) -> int:
@@ -275,9 +354,10 @@ async def preview(
     err = await validate_upload(image_bytes)
     if err is not None:
         return err
+    image_bytes = strip_exif(image_bytes)
     locked = parse_locked_colors(locked_colors)
-    plates = _clamp(plates, 2, 60)
-    dust = _clamp(dust, 0, 100)
+    plates = _clamp(plates, PLATES_MIN, PLATES_MAX)
+    dust = _clamp(dust, DUST_MIN, DUST_MAX)
     mod = get_module(version)
     if mod is None:
         return JSONResponse(status_code=400, content={"error": f"Unknown version: {version}. Valid: {sorted(VALID_VERSIONS)}"})
@@ -396,9 +476,10 @@ async def preview_stream(
     err = await validate_upload(image_bytes)
     if err is not None:
         return err
+    image_bytes = strip_exif(image_bytes)
     locked = parse_locked_colors(locked_colors)
-    plates = _clamp(plates, 2, 60)
-    dust = _clamp(dust, 0, 100)
+    plates = _clamp(plates, PLATES_MIN, PLATES_MAX)
+    dust = _clamp(dust, DUST_MIN, DUST_MAX)
     mod = get_module(version)
     if mod is None:
         return JSONResponse(status_code=400, content={"error": f"Unknown version: {version}. Valid: {sorted(VALID_VERSIONS)}"})
@@ -508,9 +589,10 @@ async def separate_endpoint(
     err = await validate_upload(image_bytes)
     if err is not None:
         return err
+    image_bytes = strip_exif(image_bytes)
     locked = parse_locked_colors(locked_colors)
-    plates = _clamp(plates, 2, 60)
-    dust = _clamp(dust, 0, 100)
+    plates = _clamp(plates, PLATES_MIN, PLATES_MAX)
+    dust = _clamp(dust, DUST_MIN, DUST_MAX)
     mod = get_module(version)
     if mod is None:
         return JSONResponse(status_code=400, content={"error": f"Unknown version: {version}. Valid: {sorted(VALID_VERSIONS)}"})
@@ -611,6 +693,7 @@ async def upscale_endpoint(image: UploadFile = File(...)):
     err = await validate_upload(image_bytes)
     if err is not None:
         return err
+    image_bytes = strip_exif(image_bytes)
     img_hash, cached, success = v11.upscale_and_cache(image_bytes)
     return Response(
         content=json.dumps({"hash": img_hash, "cached": cached, "upscaled": success}),
@@ -639,8 +722,12 @@ async def merge_endpoint(
     err = await validate_upload(image_bytes)
     if err is not None:
         return err
+    image_bytes = strip_exif(image_bytes)
     locked = parse_locked_colors(locked_colors)
-    pairs = json.loads(merge_pairs)
+    try:
+        pairs = json.loads(merge_pairs)
+    except (json.JSONDecodeError, TypeError):
+        return JSONResponse(status_code=400, content={"error": "Invalid merge_pairs JSON."})
 
     merge_mod = VERSION_MAP.get(version)
     if merge_mod is None:
@@ -711,8 +798,7 @@ async def plates_endpoint(
     err = await validate_upload(image_bytes)
     if err is not None:
         return err
-    if len(image_bytes) > 50 * 1024 * 1024:
-        return JSONResponse(status_code=413, content={"error": "File too large. Maximum 50MB."})
+    image_bytes = strip_exif(image_bytes)
     locked = parse_locked_colors(locked_colors)
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
@@ -725,7 +811,7 @@ async def plates_endpoint(
         ratio = max_dim / max(img.size)
         img = img.resize((int(img.size[0] * ratio), int(img.size[1] * ratio)), Image.LANCZOS)
 
-    plates = min(max(int(plates), 2), 35)
+    plates = _clamp(int(plates), PLATES_MIN, PLATES_MAX)
     arr = np.array(img)
     mod = get_module(version)
     kwargs: dict = dict(
@@ -785,6 +871,7 @@ async def auto_optimize_endpoint(
     err = await validate_upload(image_bytes)
     if err is not None:
         return err
+    image_bytes = strip_exif(image_bytes)
     status = auto_optimize.trigger_optimization(image_bytes, initial_plates=plates)
     return Response(
         content=json.dumps(status),
@@ -792,9 +879,17 @@ async def auto_optimize_endpoint(
     )
 
 
+# Allowlist pattern for job IDs: exactly 12 lowercase hex chars (matches what
+# auto_optimize.trigger_optimization() generates via md5[:12]).
+import re as _re
+_JOB_ID_RE = _re.compile(r"^[a-f0-9]{12}$")
+
+
 @app.get("/api/auto-optimize/{job_id}")
 async def auto_optimize_status(job_id: str):
     """Poll auto-optimization status."""
+    if not _JOB_ID_RE.match(job_id):
+        return JSONResponse(status_code=400, content={"error": "Invalid job ID."})
     status = auto_optimize.get_status(job_id)
     return Response(
         content=json.dumps(status),

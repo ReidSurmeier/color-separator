@@ -22,7 +22,11 @@ pytestmark = pytest.mark.skipif(not HAS_TESTCLIENT, reason="TestClient deps miss
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    # When BACKEND_API_KEY is set in the environment, include it in all test
+    # requests so the APIKeyMiddleware doesn't block them.
+    api_key = os.environ.get("BACKEND_API_KEY", "")
+    headers = {"X-API-Key": api_key} if api_key else {}
+    return TestClient(app, headers=headers)
 
 
 @pytest.fixture
