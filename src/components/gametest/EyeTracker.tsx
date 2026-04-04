@@ -3,7 +3,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { GazeEngine, type ColumnRefs } from '@/lib/gametest/gazeEngine';
 
-declare const webgazer: { begin: () => Promise<unknown>; setGazeListener: (cb: (data: { x: number; y: number } | null) => void) => unknown; pause: () => void; resume: () => void; end: () => void; params: { showVideoPreview: boolean }; [key: string]: unknown };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const webgazer: Record<string, any>;
 
 interface EyeTrackerProps {
   active: boolean;

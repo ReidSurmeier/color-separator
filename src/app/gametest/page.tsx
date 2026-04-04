@@ -17,7 +17,8 @@ import ReportSection from '@/components/gametest/ReportSection';
 import CameraPermission from '@/components/gametest/CameraPermission';
 import EyeTracker from '@/components/gametest/EyeTracker';
 
-declare const webgazer: { begin: () => Promise<unknown>; setGazeListener: (cb: (data: { x: number; y: number } | null) => void) => unknown; pause: () => void; resume: () => void; end: () => void; params: { showVideoPreview: boolean }; [key: string]: unknown };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const webgazer: Record<string, any>;
 
 type Phase = 'landing' | 'camera_permission' | 'calibrating' | 'testing' | 'quiz' | 'report';
 
