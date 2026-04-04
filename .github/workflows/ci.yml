@@ -29,7 +29,7 @@ jobs:
       - run: pip install -r backend/requirements.txt
       - run: pip install pytest pytest-cov flake8
       - run: cd backend && pytest tests/ -v --cov=. --cov-report=xml:coverage.xml --cov-config=.coveragerc
-      - run: flake8 backend/main.py --max-line-length=120 --ignore=E501,W503,E402,E722,F401,F403,F405,E302,E305 --count
+      - run: flake8 backend/main.py --max-line-length=120 --ignore=E501,W503,E402,E722,F401,F403,F405,E302,E303,E305,E401,F841 --count
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:

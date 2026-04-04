@@ -39,7 +39,7 @@ export default function GameTestPage() {
   const [allImages, setAllImages] = useState<string[]>([]);
 
   const gazeEngine = useMemo(() => new GazeEngine(), []);
-  const sessionStart = useRef(Date.now());
+  const sessionStart = useRef<number>(0);
   const scrollProgressLog = useRef<number[]>([]);
 
   const leftOuterRef = useRef<HTMLDivElement>(null);
