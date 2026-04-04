@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored/minified libraries
+    "public/webgazer.js",
+    // Backend (not a JS project)
+    "backend/**",
   ]),
 ]);
 
