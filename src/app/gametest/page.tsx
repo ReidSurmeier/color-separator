@@ -17,7 +17,7 @@ import ReportSection from '@/components/gametest/ReportSection';
 import CameraPermission from '@/components/gametest/CameraPermission';
 import EyeTracker from '@/components/gametest/EyeTracker';
 
-declare const webgazer: any;
+declare const webgazer: { begin: () => Promise<unknown>; setGazeListener: (cb: (data: { x: number; y: number } | null) => void) => unknown; pause: () => void; resume: () => void; end: () => void; params: { showVideoPreview: boolean }; [key: string]: unknown };
 
 type Phase = 'landing' | 'camera_permission' | 'calibrating' | 'testing' | 'quiz' | 'report';
 

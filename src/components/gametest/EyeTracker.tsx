@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { GazeEngine, type ColumnRefs } from '@/lib/gametest/gazeEngine';
 
-declare const webgazer: any;
+declare const webgazer: { begin: () => Promise<unknown>; setGazeListener: (cb: (data: { x: number; y: number } | null) => void) => unknown; pause: () => void; resume: () => void; end: () => void; params: { showVideoPreview: boolean }; [key: string]: unknown };
 
 interface EyeTrackerProps {
   active: boolean;
@@ -17,7 +17,7 @@ export default function EyeTracker({ active, columnRefs, gazeEngine, scrollPctFn
   const listenerSet = useRef(false);
 
   const gazeCallback = useCallback(
-    (data: any) => {
+    (data: { x: number; y: number } | null) => {
       if (!data) return;
       gazeEngine.processGaze(data.x, data.y);
     },
