@@ -8,13 +8,6 @@ const SAM_VERSIONS = ["v15", "v16", "v17", "v18", "v19", "v20"];
 // GPU proxy disabled — local backend has GPU now
 const USE_GPU_PROXY = false;
 
-function getEndpoint(action: string, version: string): string {
-  if (USE_GPU_PROXY && SAM_VERSIONS.includes(version)) {
-    return `/api/gpu-proxy`;
-  }
-  return `${BACKEND_URL}/api/${action}`;
-}
-
 function buildGpuFormData(file: File, params: SeparationParams, action: string): FormData {
   const fd = buildFormData(file, params);
   fd.append("action", action);
