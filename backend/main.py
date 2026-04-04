@@ -84,8 +84,8 @@ app = FastAPI(title="Woodblock Color Separation API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://tools.reidsurmeier.wtf", "http://localhost:3003"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "Accept"],
 )
 
 # ── API Key authentication middleware ──
